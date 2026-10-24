@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Firmware updates for networks where the phones can't reach your computer: a fourth source, "a server the phones can reach, filled over SSH". PhoneDesk copies the image over SSH to a server on the phones' network (a FreePBX box's `/tftpboot`, say) under `phonedesk/<version>/`, then points the phones at it over TFTP, HTTP or HTTPS. The copy is skipped when the same file is already there, the server's host key is pinned on first use, and **Test relay** in Settings checks the login and folder.
+
 ## 0.1.1
 
 - GXP16xx and GXP21xx phones can be read: their firmware answers 403 Forbidden to API calls that don't carry the headers the phone's own web page sends (Referer, Origin), so PhoneDesk now sends them. A wrong password on these phones ("wrong3") is reported as a login failure.

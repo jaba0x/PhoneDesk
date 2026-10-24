@@ -278,6 +278,18 @@ func (a *App) SaveSettings(s store.Settings) error {
 // Checks lists the dashboard checks, for the switches in Settings.
 func (a *App) Checks() []core.Check { return core.Checks }
 
+// TestRelay tries the relay server with the settings as typed (an empty
+// password means the stored one).
+func (a *App) TestRelay(s store.Settings) (string, error) { return a.mgr.TestRelay(s) }
+
+// ForgetRelayHostKey drops the pinned SSH host key, for a reinstalled relay server.
+func (a *App) ForgetRelayHostKey() error { return a.st.SetRelayHostKey("") }
+
+// PickRelayKeyFile chooses a private key file for the relay server.
+func (a *App) PickRelayKeyFile() (string, error) {
+	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{Title: "Choose an SSH private key"})
+}
+
 // ---- actions on a phone ----
 
 func (a *App) Reboot(id string) error { return a.mgr.Reboot(id) }

@@ -11,7 +11,7 @@
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%7C%2011-1b212b?style=flat-square&logo=windows&logoColor=white">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.23+-1b212b?style=flat-square&logo=go&logoColor=white">
   <img alt="Wails" src="https://img.shields.io/badge/Wails-v2-1b212b?style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.1-4cc38a?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.2-4cc38a?style=flat-square">
 </p>
 
 <p align="center">
@@ -73,7 +73,7 @@ Add `.bin` images to the library, or paste a download link from Grandstream's fi
 
 Grandstream phones fetch firmware themselves, so for an update PhoneDesk points the phone at an image, reboots it, waits for it to download and install, and checks that it came back on the new version. Then the phone's previous upgrade settings are put back. Phones are updated one after another, so a bad image can't take a whole office down at once.
 
-By default the image is served from your computer over HTTP (port 6970, changeable), which means the phone has to be able to reach your computer. If it can't, point updates at `firmware.grandstream.com` or at your own server instead, in Settings.
+By default the image is served from your computer over HTTP (port 6970, changeable), which means the phone has to be able to reach your computer. When it can't, over zero trust access or a one-way VPN, pick the SSH relay instead: PhoneDesk copies the image over SSH to a server the phones can reach (a FreePBX box with its TFTP root, say) and points the phones at that. Or point them at `firmware.grandstream.com` or a server you fill yourself.
 
 ### Phone list
 Search by name, extension, address, site, model, firmware or MAC, or by state: `offline`, `disabled`, `unregistered`, `problem`, `update`. Press `/` to jump to the search box. Tick phones to read, reboot, apply a template, update, disable, enable or delete them together, or use the small buttons at the end of each row. A disabled phone keeps its last data but isn't checked, read or alerted on until you enable it again.
@@ -171,6 +171,7 @@ internal/grandstream  the phone's web API (login, values, line status, reboot), 
 internal/core         polling, problem rules, templates applied to phones, network scan, firmware updates
 internal/store        inventory, encrypted credentials, snapshots, settings copies, export and import
 internal/firmware     image library, version matching, the HTTP server phones download from
+internal/relay        copies images over SSH to a server the phones can reach
 ```
 
 Phones differ in which status keys they answer. If one of yours shows blanks, the **Raw output** tab has exactly what it sent back, and that's what's needed to fix it.

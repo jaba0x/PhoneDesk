@@ -26,6 +26,7 @@ internal/grandstream   the phone's web API client, P-value names, snapshot build
 internal/core          polling, problem rules, templates applied to phones, network scan, update jobs
 internal/store         inventory, encrypted credentials, snapshots, settings copies, bundles
 internal/firmware      image library, version parsing, the HTTP server phones download from
+internal/relay         copies images over SSH to a server the phones can reach, with host-key pinning
 internal/appver        version comparison for the update check
 frontend/dist          the UI
 frontend/dev           browser preview with sample data

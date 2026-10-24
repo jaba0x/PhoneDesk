@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	pathpkg "path"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jaba0x/phonedesk/internal/firmware"
 	"github.com/jaba0x/phonedesk/internal/grandstream"
+	"github.com/jaba0x/phonedesk/internal/relay"
 	"github.com/jaba0x/phonedesk/internal/store"
 )
 
@@ -249,7 +251,7 @@ func (m *Manager) runJob(j *Job) {
 	set := m.st.Settings()
 
 	// where the phone fetches from
-	path, via, token, err := m.firmwareSource(set, p, j.Image)
+	path, via, token, err := m.firmwareSource(ctx, set, p, j)
 	if err != nil {
 		m.finishJob(j, err)
 		return
@@ -394,8 +396,77 @@ func (m *Manager) runJob(j *Job) {
 	}
 }
 
-// firmwareSource works out the server path and transport for a job.
-func (m *Manager) firmwareSource(set store.Settings, p store.Phone, image string) (path, via, token string, err error) {
+// viaCode turns "tftp", "http" or "https" into the phone's P-value.
+func viaCode(via string) string {
+	switch via {
+	case "https":
+		return "2"
+	case "tftp":
+		return "0"
+	}
+	return "1"
+}
+
+// relayOptions builds the SSH options for the relay server from the settings.
+func (m *Manager) relayOptions(set store.Settings) (relay.Options, error) {
+	pw, err := m.st.RelayPassword()
+	if err != nil {
+		return relay.Options{}, fmt.Errorf("can't read the relay password: %w", err)
+	}
+	return relay.Options{Host: set.RelayHost, Port: set.RelayPort, User: set.RelayUser, Password: pw, KeyFile: set.RelayKeyFile, KnownKey: set.RelayHostKey}, nil
+}
+
+// relayDial connects to the relay server and pins its host key on first use.
+func (m *Manager) relayDial(ctx context.Context, set store.Settings) (*relay.Client, error) {
+	o, err := m.relayOptions(set)
+	if err != nil {
+		return nil, err
+	}
+	c, err := relay.Dial(ctx, o)
+	if err != nil {
+		if errors.Is(err, relay.ErrHostKeyMismatch) {
+			return nil, errors.New("the relay server's SSH host key changed since it was first used; if the server was reinstalled, use Forget host key in Settings")
+		}
+		return nil, err
+	}
+	if set.RelayHostKey == "" && c.Fingerprint != "" {
+		m.st.SetRelayHostKey(c.Fingerprint)
+	}
+	return c, nil
+}
+
+// TestRelay connects to the relay server described by set (an empty password
+// means the stored one) and checks the remote folder is writable.
+func (m *Manager) TestRelay(set store.Settings) (string, error) {
+	cur := m.st.Settings()
+	o := relay.Options{Host: strings.TrimSpace(set.RelayHost), Port: set.RelayPort, User: strings.TrimSpace(set.RelayUser), Password: set.RelayPassword, KeyFile: strings.TrimSpace(set.RelayKeyFile)}
+	if o.Password == "" {
+		o.Password, _ = m.st.RelayPassword()
+	}
+	if o.Host == cur.RelayHost && o.Port == cur.RelayPort {
+		o.KnownKey = cur.RelayHostKey
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	c, err := relay.Dial(ctx, o)
+	if err != nil {
+		if errors.Is(err, relay.ErrHostKeyMismatch) {
+			return "", errors.New("the relay server's SSH host key changed since it was first used; if the server was reinstalled, use Forget host key below")
+		}
+		return "", err
+	}
+	defer c.Close()
+	info, err := c.Check(strings.TrimSpace(set.RelayDir))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Connected to %s (%s). Host key %s", o.Host, info, relay.ShortFingerprint(c.Fingerprint)), nil
+}
+
+// firmwareSource works out the server path and transport for a job, copying
+// the image to the relay server first when that's the source.
+func (m *Manager) firmwareSource(ctx context.Context, set store.Settings, p store.Phone, j *Job) (path, via, token string, err error) {
+	image := j.Image
 	switch set.FirmwareSource {
 	case "grandstream":
 		return "firmware.grandstream.com", "1", "", nil
@@ -403,13 +474,33 @@ func (m *Manager) firmwareSource(set store.Settings, p store.Phone, image string
 		if set.FirmwareServer == "" {
 			return "", "", "", errors.New("no custom firmware server set")
 		}
-		via = "1"
-		if set.FirmwareVia == "https" {
-			via = "2"
-		} else if set.FirmwareVia == "tftp" {
-			via = "0"
+		return set.FirmwareServer, viaCode(set.FirmwareVia), "", nil
+	case "relay":
+		if m.lib == nil {
+			return "", "", "", errors.New("the firmware library couldn't be opened")
 		}
-		return set.FirmwareServer, via, "", nil
+		local, err := m.lib.Path(image)
+		if err != nil {
+			return "", "", "", err
+		}
+		name := grandstream.FirmwareFile(j.Family)
+		dir := pathpkg.Join(set.RelayDir, "phonedesk", j.To)
+		m.jobLog(j, "Copying the image to "+set.RelayHost, 0.03, "Uploading %s to %s/%s over SSH", image, dir, name)
+		c, err := m.relayDial(ctx, set)
+		if err != nil {
+			return "", "", "", err
+		}
+		defer c.Close()
+		copied, err := c.Upload(ctx, local, dir, name)
+		if err != nil {
+			return "", "", "", err
+		}
+		if copied {
+			m.jobLog(j, "", 0.04, "Copied %s to the relay server", name)
+		} else {
+			m.jobLog(j, "", 0.04, "%s is already on the relay server", name)
+		}
+		return set.RelayServerPath + "/phonedesk/" + j.To, viaCode(set.RelayVia), "", nil
 	}
 	if m.srv == nil {
 		return "", "", "", errors.New("the firmware server isn't available")

@@ -297,6 +297,7 @@ func (s *Store) Import(src, pass, mode string) (ImportResult, error) {
 		s.d.Phones = b.d.Phones
 		s.d.Credentials = creds
 		s.d.Settings = b.d.Settings
+		s.d.Settings.RelayPassword, s.d.Settings.RelayHostKey = "", "" // encrypted with the other computer's key
 		s.d.Templates = b.d.Templates
 		for _, sw := range s.d.Phones {
 			extract(sw.ID, sw.ID)

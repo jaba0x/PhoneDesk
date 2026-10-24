@@ -905,9 +905,22 @@ async function renderSettings() {
         <div class="row" style="max-width:360px;margin:0 0 8px 24px"><label class="f" style="margin-bottom:6px"><span>Port</span><input type="number" id="fp" min="1" max="65535" value="${set.firmwarePort}"></label>
           <label class="f" style="margin-bottom:6px"><span>Server now</span><div style="padding:6px 0;font-size:13px">${fws.running ? `<span class="ok">Running</span> on ${esc(fws.example || ":" + fws.port)} <a onclick="call('StopFirmwareServer').then(renderSettings)">Stop</a>` : `<span class="muted">Stopped</span> <a onclick="call('StartFirmwareServer').then(renderSettings).catch((e)=>toast(e.message,true))">Start</a>`}</div></label></div>
         <label class="check" style="margin-bottom:6px"><input type="radio" name="fs" value="grandstream" ${set.firmwareSource === "grandstream" ? "checked" : ""}> Grandstream's public server (firmware.grandstream.com) <span class="faint">(the phone needs internet access; installs whatever is current there)</span></label>
-        <label class="check" style="margin-bottom:6px"><input type="radio" name="fs" value="custom" ${set.firmwareSource === "custom" ? "checked" : ""}> Another server</label>
-        <div class="row" style="max-width:480px;margin-left:24px"><label class="f"><span>Server path <span class="faint">(host or host/folder)</span></span><input type="text" id="fsrv" class="mono" value="${esc(set.firmwareServer || "")}" placeholder="fw.example.com/grandstream"></label>
-          <label class="f" style="flex:0 0 120px"><span>Via</span><select id="fvia">${["http", "https", "tftp"].map((v) => `<option value="${v}" ${set.firmwareVia === v ? "selected" : ""}>${v.toUpperCase()}</option>`).join("")}</select></label></div></div>
+        <label class="check" style="margin-bottom:6px"><input type="radio" name="fs" value="custom" ${set.firmwareSource === "custom" ? "checked" : ""}> Another server <span class="faint">(you put the images there yourself)</span></label>
+        <div class="row" style="max-width:480px;margin:0 0 8px 24px"><label class="f"><span>Server path <span class="faint">(host or host/folder)</span></span><input type="text" id="fsrv" class="mono" value="${esc(set.firmwareServer || "")}" placeholder="fw.example.com/grandstream"></label>
+          <label class="f" style="flex:0 0 120px"><span>Via</span><select id="fvia">${["http", "https", "tftp"].map((v) => `<option value="${v}" ${set.firmwareVia === v ? "selected" : ""}>${v.toUpperCase()}</option>`).join("")}</select></label></div>
+        <label class="check" style="margin-bottom:6px"><input type="radio" name="fs" value="relay" ${set.firmwareSource === "relay" ? "checked" : ""}> A server the phones can reach, filled over SSH <span class="faint">(for zero trust or one-way VPNs: PhoneDesk copies the image there first, then points the phone at it)</span></label>
+        <div style="margin-left:24px;max-width:720px">
+          <div class="row"><label class="f"><span>SSH host <span class="faint">(as this computer reaches it)</span></span><input type="text" id="rh" class="mono" value="${esc(set.relayHost || "")}" placeholder="10.0.18.100"></label>
+            <label class="f" style="flex:0 0 90px"><span>Port</span><input type="number" id="rp" value="${set.relayPort || 22}"></label>
+            <label class="f" style="flex:0 0 150px"><span>User</span><input type="text" id="ru" class="mono" value="${esc(set.relayUser || "")}" placeholder="root"></label>
+            <label class="f"><span>Password${set.relayHasPassword ? ' <span class="faint">(stored; leave empty to keep)</span>' : ""}</span><input type="password" id="rpw" autocomplete="new-password"></label></div>
+          <div class="row"><label class="f"><span>Private key file <span class="faint">(optional, instead of or with a password)</span></span><div class="row" style="align-items:center"><input type="text" id="rk" class="mono" value="${esc(set.relayKeyFile || "")}" placeholder="~/.ssh/id_ed25519"><span style="flex:none"><button class="btn" onclick="pickRelayKey()">Choose…</button></span></div></label></div>
+          <div class="row"><label class="f"><span>Folder on the server <span class="faint">(images go under it)</span></span><input type="text" id="rd" class="mono" value="${esc(set.relayDir || "/tftpboot")}" placeholder="/tftpboot"></label>
+            <label class="f"><span>Path phones use for that folder <span class="faint">(host or host/folder)</span></span><input type="text" id="rsp" class="mono" value="${esc(set.relayServerPath || "")}" placeholder="10.0.18.100"></label>
+            <label class="f" style="flex:0 0 120px"><span>Via</span><select id="rvia">${["tftp", "http", "https"].map((v) => `<option value="${v}" ${(set.relayVia || "tftp") === v ? "selected" : ""}>${v.toUpperCase()}</option>`).join("")}</select></label></div>
+          <p class="faint" style="font-size:12.5px;margin:-4px 0 10px">Each image is copied to <span class="mono">folder/phonedesk/&lt;version&gt;/</span> and the phone is pointed at <span class="mono">path/phonedesk/&lt;version&gt;</span>. On a FreePBX box the TFTP root is <span class="mono">/tftpboot</span> and the path phones use is just the PBX address.${set.relayHostKey ? ` Host key pinned: <span class="mono">${esc(set.relayHostKey.replace("SHA256:", "").slice(0, 12))}…</span> <a onclick="forgetRelayKey()">Forget host key</a>` : ""}</p>
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px"><button class="btn small" onclick="testRelay(this)">Test relay</button><span id="rres" class="muted" style="font-size:13px"></span></div>
+        </div></div>
       <button class="btn primary" onclick="saveSettings()">Save settings</button></div></section>
     <section class="panel" style="margin-top:18px"><h2>Data</h2><div class="body">
       <label class="f"><span>Data folder${df.custom ? "" : ' <span class="faint">(default)</span>'}</span>
@@ -931,13 +944,33 @@ async function renderSettings() {
     </div></section></div>`;
 }
 
+function relayForm() {
+  return { relayHost: $("#rh").value.trim(), relayPort: +$("#rp").value || 22, relayUser: $("#ru").value.trim(), relayPassword: $("#rpw").value, relayKeyFile: $("#rk").value.trim(), relayDir: $("#rd").value.trim(), relayServerPath: $("#rsp").value.trim(), relayVia: $("#rvia").value };
+}
+
+async function forgetRelayKey() {
+  try { await call("ForgetRelayHostKey"); toast("Host key forgotten; the next connection pins the new one"); renderSettings(); } catch (e) { toast(e.message, true); }
+}
+
+async function pickRelayKey() {
+  try { const p = await call("PickRelayKeyFile"); if (p) $("#rk").value = p; } catch (e) { toast(e.message, true); }
+}
+
+async function testRelay(btn) {
+  const res = $("#rres");
+  btn.disabled = true; btn.textContent = "Connecting…";
+  try { res.innerHTML = `<span class="ok">${esc(await call("TestRelay", { ...S.settings, ...relayForm() }))}</span>`; } catch (e) { res.innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+  btn.disabled = false; btn.textContent = "Test relay";
+}
+
 async function saveSettings() {
   try {
     await call("SaveSettings", { ...S.settings, pingInterval: +$("#pi").value, collectInterval: +$("#ci").value, parallel: +$("#pa").value, keepBackups: +$("#kb").value, staleHours: +$("#sh").value,
       checksOff: $$("input[data-check]").filter((x) => !x.checked).map((x) => x.dataset.check),
-      firmwareSource: $("input[name=fs]:checked").value, firmwarePort: +$("#fp").value, firmwareServer: $("#fsrv").value.trim(), firmwareVia: $("#fvia").value });
+      firmwareSource: $("input[name=fs]:checked").value, firmwarePort: +$("#fp").value, firmwareServer: $("#fsrv").value.trim(), firmwareVia: $("#fvia").value, ...relayForm() });
     S.settings = await call("GetSettings");
     toast("Settings saved");
+    if ($("#rpw")) $("#rpw").value = "";
   } catch (e) { toast(e.message, true); }
 }
 

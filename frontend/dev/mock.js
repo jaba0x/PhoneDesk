@@ -93,7 +93,9 @@
   const api = {
     Platform: async () => "browser", Version: async () => "0.1.0", StartupNotice: async () => "", LastUpdateCheck: async () => null,
     CheckForUpdate: async () => ({ current: "0.1.0", latest: "0.2.0", url: "https://github.com/jaba0x/PhoneDesk/releases", available: true }),
-    GetSettings: async () => ({ pingInterval: 30, collectInterval: 15, parallel: 4, keepBackups: 20, staleHours: 6, firmwareSource: "builtin", firmwareServer: "", firmwareVia: "http", firmwarePort: 6970, checksOff: ["option66"] }),
+    GetSettings: async () => ({ pingInterval: 30, collectInterval: 15, parallel: 4, keepBackups: 20, staleHours: 6, firmwareSource: "builtin", firmwareServer: "", firmwareVia: "http", firmwarePort: 6970, relayHost: "10.0.18.100", relayPort: 22, relayUser: "root", relayHasPassword: true, relayKeyFile: "", relayHostKey: "SHA256:Qm9ndXNGaW5nZXJwcmludA", relayDir: "/tftpboot", relayServerPath: "10.0.18.100", relayVia: "tftp", checksOff: ["option66"] }),
+    TestRelay: async (s) => { await new Promise((r) => setTimeout(r, 600)); return `Connected to ${s.relayHost} (pbx, 41G free in ${s.relayDir}). Host key Qm9ndXNGaW5n…`; },
+    PickRelayKeyFile: async () => "/Users/jaba/.ssh/id_ed25519", ForgetRelayHostKey: async () => {},
     Checks: async () => [
       { id: "offline", label: "Phone is offline", detail: "The web port doesn't answer.", severity: "critical", group: "Reachability" },
       { id: "login-failed", label: "Web login failed", detail: "The phone refused the credentials.", severity: "critical", group: "Reachability" },

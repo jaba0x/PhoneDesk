@@ -52,10 +52,24 @@ type Settings struct {
 	// "builtin" serves the library from this computer over HTTP,
 	// "grandstream" points phones at firmware.grandstream.com,
 	// "custom" uses FirmwareServer as the server path.
+	// "relay" uploads the image over SSH to a server the phones can reach,
+	// then points them at it.
 	FirmwareSource string `json:"firmwareSource"`
 	FirmwareServer string `json:"firmwareServer"`
 	FirmwareVia    string `json:"firmwareVia"`  // "http", "https" or "tftp", for a custom server
 	FirmwarePort   int    `json:"firmwarePort"` // built-in HTTP server port
+	// The relay server. RelayPassword is encrypted on disk and never sent to
+	// the UI; RelayHasPassword tells the UI one is set.
+	RelayHost        string `json:"relayHost"`
+	RelayPort        int    `json:"relayPort"`
+	RelayUser        string `json:"relayUser"`
+	RelayPassword    string `json:"relayPassword,omitempty"`
+	RelayHasPassword bool   `json:"relayHasPassword"`
+	RelayKeyFile     string `json:"relayKeyFile"`
+	RelayHostKey     string `json:"relayHostKey"`    // pinned on first connect
+	RelayDir         string `json:"relayDir"`        // where images land on the server, e.g. /tftpboot
+	RelayServerPath  string `json:"relayServerPath"` // what phones use to reach it: host or host/folder
+	RelayVia         string `json:"relayVia"`        // "tftp", "http" or "https"
 	// ChecksOff lists the dashboard checks switched off, by id (see core.Checks).
 	// Absent from the file means the defaults; an empty list means every check is on.
 	ChecksOff []string `json:"checksOff"`
@@ -64,6 +78,7 @@ type Settings struct {
 func DefaultSettings() Settings {
 	return Settings{PingInterval: 30, CollectInterval: 15, Parallel: 4, KeepBackups: 20, StaleHours: 6,
 		FirmwareSource: "builtin", FirmwareVia: "http", FirmwarePort: 6970,
+		RelayPort: 22, RelayDir: "/tftpboot", RelayVia: "tftp",
 		ChecksOff: []string{"option66"}}
 }
 
@@ -422,12 +437,36 @@ func firstNonEmpty(v ...string) string {
 
 // ---- settings ----
 
+// Settings returns the settings without the relay password; RelayHasPassword
+// says whether one is stored.
 func (s *Store) Settings() Settings {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.d.Settings
+	v := s.d.Settings
+	v.RelayHasPassword = v.RelayPassword != ""
+	v.RelayPassword = ""
+	return v
 }
 
+// RelayPassword returns the stored relay password in clear.
+func (s *Store) RelayPassword() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.decrypt(s.d.Settings.RelayPassword)
+}
+
+// SetRelayHostKey pins (or clears) the relay server's host key.
+func (s *Store) SetRelayHostKey(fp string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.d.Settings.RelayHostKey == fp {
+		return nil
+	}
+	s.d.Settings.RelayHostKey = fp
+	return s.saveLocked()
+}
+
+// SaveSettings stores v. An empty relay password keeps the one already stored.
 func (s *Store) SaveSettings(v Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -435,6 +474,36 @@ func (s *Store) SaveSettings(v Settings) error {
 		return errors.New("enter the firmware server path, or pick another source")
 	}
 	v.FirmwareServer = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(v.FirmwareServer, "https://"), "http://"))
+	v.RelayHost, v.RelayUser, v.RelayDir, v.RelayKeyFile = strings.TrimSpace(v.RelayHost), strings.TrimSpace(v.RelayUser), strings.TrimSpace(v.RelayDir), strings.TrimSpace(v.RelayKeyFile)
+	v.RelayServerPath = strings.TrimSuffix(strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(v.RelayServerPath, "https://"), "http://")), "/")
+	if v.FirmwareSource == "relay" {
+		if v.RelayHost == "" || v.RelayUser == "" || v.RelayDir == "" || v.RelayServerPath == "" {
+			return errors.New("the relay needs an SSH host, user, remote folder and the path phones use")
+		}
+	}
+	if v.RelayPort <= 0 || v.RelayPort > 65535 {
+		v.RelayPort = 22
+	}
+	switch v.RelayVia {
+	case "tftp", "http", "https":
+	default:
+		v.RelayVia = "tftp"
+	}
+	if v.RelayPassword != "" {
+		enc, err := s.encrypt(v.RelayPassword)
+		if err != nil {
+			return err
+		}
+		v.RelayPassword = enc
+	} else {
+		v.RelayPassword = s.d.Settings.RelayPassword
+	}
+	if v.RelayHost != s.d.Settings.RelayHost || v.RelayPort != s.d.Settings.RelayPort {
+		v.RelayHostKey = "" // another server, another key
+	} else {
+		v.RelayHostKey = s.d.Settings.RelayHostKey
+	}
+	v.RelayHasPassword = false
 	s.d.Settings = fixSettings(v)
 	return s.saveLocked()
 }

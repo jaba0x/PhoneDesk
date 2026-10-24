@@ -32,6 +32,10 @@ The phone validates every value and rejects the whole batch when one is wrong, s
 
 With the default source, the phone downloads the image from your computer on the port shown in Settings (6970 unless you changed it). The phone has to reach that port: allow it through the firewall on your computer, and make sure the phone's network can route to yours. Over a VPN or zero trust access that only lets you in, not the phone out, use Grandstream's server or a server of your own instead. See [Firmware updates](firmware.md).
 
+## The phones can't reach my computer at all
+
+Over zero trust access or a one-way VPN the built-in firmware server never gets a download. Use the SSH relay in Settings → Where phones fetch firmware from: PhoneDesk copies the image to a server on the phones' network (your PBX, say) and points the phones there. GXP16xx phones have no firmware upload in their web UI, so a server they can fetch from is the only route for them; GRP phones also fetch, so the relay covers everything.
+
 ## The app says a newer version is available but I'd rather wait
 
 **Later** hides the bar for that version. It comes back when the next one is released.

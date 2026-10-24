@@ -22,7 +22,7 @@ Every rule the dashboard applies is listed here with its severity, grouped by ar
 
 ## Where phones fetch firmware from
 
-See [Firmware updates](firmware.md). This is also where the built-in server can be started and stopped by hand, and where its port is set.
+Four choices: this computer, Grandstream's public server, a server you fill yourself, or a server PhoneDesk fills over SSH for networks where the phones can't reach you. See [Firmware updates](firmware.md). This is also where the built-in server can be started and stopped by hand, where its port is set, and where the relay's SSH login, folder and path are tested with **Test relay**.
 
 ## Data
 

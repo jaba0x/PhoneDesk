@@ -59,7 +59,7 @@ async function renderFirmware(soft) {
 
 function sourceLine(set) {
   const s = FW.server || {};
-  const src = { builtin: `this computer${s.running ? ` (serving on ${esc(s.example || ":" + s.port)})` : ` on port ${s.port || set.firmwarePort}`}`, grandstream: "firmware.grandstream.com", custom: esc(set.firmwareServer || "another server") }[set.firmwareSource || "builtin"];
+  const src = { builtin: `this computer${s.running ? ` (serving on ${esc(s.example || ":" + s.port)})` : ` on port ${s.port || set.firmwarePort}`}`, grandstream: "firmware.grandstream.com", custom: esc(set.firmwareServer || "another server"), relay: `${esc(set.relayServerPath || "the relay server")}, filled over SSH from here` }[set.firmwareSource || "builtin"];
   return `Phones fetch from: <a data-go="#/settings">${src}</a>`;
 }
 
@@ -219,7 +219,8 @@ function openUpgradeDialog(ids) {
   const set = S.settings || {};
   const how = { builtin: `Each phone is pointed at this computer (port ${set.firmwarePort}), rebooted, and fetches the image on the way up. The phone has to reach this computer, so keep PhoneDesk open and the firewall out of the way.`,
     grandstream: "Each phone is pointed at firmware.grandstream.com, rebooted, and fetches whatever Grandstream currently publishes for it. The phone needs internet access.",
-    custom: `Each phone is pointed at ${esc(set.firmwareServer)}, rebooted, and fetches the image from there.` }[set.firmwareSource || "builtin"];
+    custom: `Each phone is pointed at ${esc(set.firmwareServer)}, rebooted, and fetches the image from there.`,
+    relay: `The image is first copied over SSH to ${esc(set.relayHost)} (${esc(set.relayDir)}/phonedesk/…), then each phone is pointed at ${esc(set.relayServerPath)} over ${esc((set.relayVia || "tftp").toUpperCase())}, rebooted, and fetches it from there. Nothing has to reach this computer.` }[set.firmwareSource || "builtin"];
   const m = modal(`<h2>Update firmware</h2><div class="body">
     <table style="margin-bottom:14px"><tbody>${ok.map((v) => `<tr><td>${esc(nameOfView(v))}</td><td class="muted">${esc(v.summary?.model || "")}</td><td class="mono muted">${esc(v.firmware.running)}</td><td class="mono ok">→ ${esc(v.firmware.available)}</td></tr>`).join("")}</tbody></table>
     ${skipped ? `<p class="faint" style="font-size:13px;margin-top:-6px">${skipped} selected phone${skipped === 1 ? " has" : "s have"} nothing newer and will be skipped.</p>` : ""}
