@@ -156,7 +156,7 @@ func fixSettings(v Settings) Settings {
 		v.StaleHours = def.StaleHours
 	}
 	switch v.FirmwareSource {
-	case "builtin", "grandstream", "custom":
+	case "builtin", "grandstream", "custom", "relay":
 	default:
 		v.FirmwareSource = def.FirmwareSource
 	}
@@ -167,6 +167,17 @@ func fixSettings(v Settings) Settings {
 	}
 	if v.FirmwarePort < 1 || v.FirmwarePort > 65535 {
 		v.FirmwarePort = def.FirmwarePort
+	}
+	if v.RelayPort < 1 || v.RelayPort > 65535 {
+		v.RelayPort = def.RelayPort
+	}
+	if v.RelayDir == "" {
+		v.RelayDir = def.RelayDir
+	}
+	switch v.RelayVia {
+	case "tftp", "http", "https":
+	default:
+		v.RelayVia = def.RelayVia
 	}
 	return v
 }

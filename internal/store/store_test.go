@@ -126,3 +126,50 @@ func TestSettings(t *testing.T) {
 		t.Fatalf("settings %+v", set)
 	}
 }
+
+func TestRelaySettingsRoundTrip(t *testing.T) {
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := st.Settings()
+	set.FirmwareSource, set.RelayHost, set.RelayUser, set.RelayPassword, set.RelayDir, set.RelayServerPath, set.RelayVia = "relay", "10.0.18.100", "root", "s3cret", "/tftpboot", "10.0.18.100", "tftp"
+	if err := st.SaveSettings(set); err != nil {
+		t.Fatal(err)
+	}
+	got := st.Settings()
+	if got.FirmwareSource != "relay" || got.RelayHost != "10.0.18.100" || got.RelayUser != "root" || got.RelayServerPath != "10.0.18.100" {
+		t.Fatalf("relay settings not kept: %+v", got)
+	}
+	if got.RelayPassword != "" || !got.RelayHasPassword {
+		t.Fatalf("password should be hidden from the UI but marked as set: %+v", got)
+	}
+	if pw, err := st.RelayPassword(); err != nil || pw != "s3cret" {
+		t.Fatalf("stored password %q %v", pw, err)
+	}
+	// saving again with an empty password keeps the old one; a new host drops the pinned key
+	st.SetRelayHostKey("SHA256:abc")
+	set = st.Settings()
+	set.RelayPassword = ""
+	if err := st.SaveSettings(set); err != nil {
+		t.Fatal(err)
+	}
+	if pw, _ := st.RelayPassword(); pw != "s3cret" {
+		t.Fatal("empty password should keep the stored one")
+	}
+	if st.Settings().RelayHostKey != "SHA256:abc" {
+		t.Fatal("host key should survive a save for the same server")
+	}
+	set = st.Settings()
+	set.RelayHost = "10.0.18.101"
+	st.SaveSettings(set)
+	if st.Settings().RelayHostKey != "" {
+		t.Fatal("host key should be dropped for another server")
+	}
+	// relay chosen without a host is refused
+	set = st.Settings()
+	set.RelayHost = ""
+	if err := st.SaveSettings(set); err == nil {
+		t.Fatal("relay without a host should be refused")
+	}
+}
