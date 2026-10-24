@@ -28,6 +28,10 @@ Firmware differs in which status keys it answers. Open the phone's **Raw output*
 
 The phone validates every value and rejects the whole batch when one is wrong, so nothing is half-applied. The error names the value where the phone said so. Common causes: a setting that doesn't exist on that model, an out-of-range number, or a time zone code the firmware doesn't know. Try the same line on one phone from its Console tab to narrow it down.
 
+## "malformed MIME header: missing colon: \"#!/bin/ash\""
+
+Seen on GXP16xx phones running 1.0.2.x firmware when PhoneDesk writes settings (an update, a template). That firmware's web server puts the first line of its own script ahead of the HTTP headers; browsers skip it, PhoneDesk 0.1.4 and older refused the answer. Fixed in 0.1.5. Update PhoneDesk.
+
 ## A firmware update never downloads
 
 With the default source, the phone downloads the image from your computer on the port shown in Settings (6970 unless you changed it). The phone has to reach that port: allow it through the firewall on your computer, and make sure the phone's network can route to yours. Over a VPN or zero trust access that only lets you in, not the phone out, use Grandstream's server or a server of your own instead. See [Firmware updates](firmware.md).

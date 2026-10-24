@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Writing settings to GXP16xx phones on 1.0.2.x firmware failed with `malformed MIME header: missing colon: "#!/bin/ash"`, which stopped every firmware update and template on them at the first step. That firmware answers `api.values.post` with a line of its own script ahead of the HTTP headers; browsers skip it, Go's HTTP client refused the whole answer. PhoneDesk now reads past it.
+
 ## 0.1.4
 
 - Delete works again: the library's delete button, Delete on phones, Remove on a phone's page, deleting templates and the "replace" import all asked with the browser's own confirm box, which the Mac window never shows, so the click quietly did nothing. They now ask with PhoneDesk's own dialog. Same for the version question after a download whose link doesn't say.

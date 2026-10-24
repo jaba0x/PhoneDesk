@@ -44,7 +44,7 @@ Everything goes through the phone's own web interface, the same endpoints its we
 - `POST /cgi-bin/api.values.post` writes P-values. The phone validates the batch as a whole.
 - `GET /cgi-bin/api-get_line_status` returns each line's state, and `api-sys_operation?request=REBOOT` reboots. These remote-control endpoints need Action URI support on the phone.
 
-Every request carries `Referer` and `Origin` headers naming the phone, because GXP firmware answers 403 without them. The window is a WKWebView on a Mac, which doesn't show `confirm()` or `prompt()` boxes: use `ask()` and `askText()` from `app.js`.
+Every request carries `Referer` and `Origin` headers naming the phone, because GXP firmware answers 403 without them. `conn.go` sits under the HTTP client and drops header lines without a colon, because GXP16xx 1.0.2.x firmware answers `api.values.post` with `#!/bin/ash` ahead of the real headers. The window is a WKWebView on a Mac, which doesn't show `confirm()` or `prompt()` boxes: use `ask()` and `askText()` from `app.js`.
 
 `internal/grandstream/parse.go` turns the raw values into a snapshot and is deliberately tolerant: each fact is taken from the first of several keys that has something in it, because firmware differs in what it answers. Reads are recorded request by request and shown on the Raw output tab.
 

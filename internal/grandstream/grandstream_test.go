@@ -3,6 +3,7 @@ package grandstream
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -247,5 +248,61 @@ func TestSortKeys(t *testing.T) {
 	SortKeys(keys)
 	if strings.Join(keys, ",") != "P2,P47,P1701,mac,prog" {
 		t.Fatalf("%v", keys)
+	}
+}
+
+// GXP16xx 1.0.2.x firmware puts "#!/bin/ash" ahead of the headers of an
+// api.values.post answer. The client has to read past it.
+func TestShebangHeaderLine(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer conn.Close()
+				buf := make([]byte, 4096)
+				n, _ := conn.Read(buf)
+				req := string(buf[:n])
+				body := `{"response":"success", "body":{ "status": "right"}}`
+				if strings.HasPrefix(req, "POST /cgi-bin/dologin") {
+					body = `{"response":"success", "body":{ "sid":"abc123"}}`
+				}
+				// exactly what the phone sends: HTTP/1.0, mixed line endings, no Content-Length
+				conn.Write([]byte("HTTP/1.0 200 OK\r\n#!/bin/ash\nCache-Control: no-cache, must-revalidate\r\nExpires: Sat Oct 24 22:43:53 TZR 2026\r\nContent-Type: application/json\r\n\r\n" + body))
+			}(conn)
+		}
+	}()
+	host, portStr, _ := net.SplitHostPort(ln.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	c := &Client{Host: host, Port: port, Scheme: "http", Username: "admin", Password: "x"}
+	ctx := context.Background()
+	if err := c.Login(ctx); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if err := c.SetValues(ctx, map[string]string{"P192": "10.0.18.100/phonedesk/1.0.7.81", "P212": "0"}); err != nil {
+		t.Fatalf("set values: %v", err)
+	}
+}
+
+func TestFixHeaderBlock(t *testing.T) {
+	in := []byte("HTTP/1.0 200 OK\r\n#!/bin/ash\nContent-Type: application/json\r\n\r\n")
+	want := "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n"
+	if got := string(fixHeaderBlock(in[:headerEnd(in)])); got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+	// a normal block is left alone
+	in = []byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n")
+	if got := string(fixHeaderBlock(in[:headerEnd(in)])); got != string(in) {
+		t.Fatalf("changed a good block: %q", got)
+	}
+	if headerEnd([]byte("HTTP/1.1 200 OK\r\nContent-")) != -1 {
+		t.Fatal("found an end that isn't there")
 	}
 }

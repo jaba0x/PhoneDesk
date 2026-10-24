@@ -70,14 +70,19 @@ func (c *Client) client() *http.Client {
 		if t == 0 {
 			t = 12 * time.Second
 		}
+		// Self-signed certificates, and on older firmware TLS 1.0/1.1 with
+		// ciphers Go no longer offers by default. The phone is on your own
+		// network and the alternative is plain HTTP, so accept them.
+		tlsCfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10, CipherSuites: legacyCipherSuites()} //nolint:gosec // see above
+		dialer := &net.Dialer{Timeout: 5 * time.Second}
 		c.http = &http.Client{
 			Timeout: t,
 			Transport: &http.Transport{
-				// Self-signed certificates, and on older firmware TLS 1.0/1.1 with
-				// ciphers Go no longer offers by default. The phone is on your own
-				// network and the alternative is plain HTTP, so accept them.
-				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10, CipherSuites: legacyCipherSuites()}, //nolint:gosec // see above
-				DialContext:         (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+				TLSClientConfig: tlsCfg,
+				// both dials wrap the connection to repair header blocks some
+				// firmware gets wrong; see conn.go
+				DialContext:         dialFixed(dialer),
+				DialTLSContext:      dialTLSFixed(dialer, tlsCfg),
 				MaxIdleConnsPerHost: 2,
 				DisableKeepAlives:   true,
 			},
