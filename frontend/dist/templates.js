@@ -24,7 +24,7 @@ async function editTemplate(id) {
 
 async function deleteTemplate(id) {
   const t = TPL.list.find((x) => x.id === id);
-  if (!confirm(`Delete template “${t?.name}”? Phones it was applied to keep their settings.`)) return;
+  if (!(await ask(`Delete template “${t?.name}”? Phones it was applied to keep their settings.`, "Delete", true))) return;
   try { await call("DeleteTemplate", id); renderTemplates(); } catch (e) { toast(e.message, true); }
 }
 

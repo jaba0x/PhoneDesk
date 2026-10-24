@@ -1,7 +1,7 @@
 "use strict";
 /* Firmware: library, available updates, update jobs. Uses helpers from app.js. */
 
-const FW = { images: [], jobs: [], dl: null, sel: new Set(), openLog: new Set(), server: {} };
+const FW = { images: [], jobs: [], dl: null, sel: new Set(), openLog: new Set(), server: {}, relay: {}, syncing: false };
 
 const mb = (n) => (n >= 1 << 20 ? (n / (1 << 20)).toFixed(n > 100 << 20 ? 0 : 1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB");
 
@@ -27,7 +27,8 @@ function fwCell(v) {
 // ---------- page ----------
 async function renderFirmware(soft) {
   try {
-    [FW.images, FW.jobs, FW.server] = await Promise.all([call("FirmwareImages"), call("UpgradeJobs"), call("FirmwareServer")]);
+    [FW.images, FW.jobs, FW.server, FW.relay] = await Promise.all([call("FirmwareImages"), call("UpgradeJobs"), call("FirmwareServer"), call("RelayStates").catch(() => ({}))]);
+    FW.relay = FW.relay || {};
   } catch (e) {
     $("#main").innerHTML = `<div class="page"><div class="head"><h1>Firmware</h1></div><div class="panel"><div class="empty">${esc(e.message)}</div></div></div>`;
     return;
@@ -38,15 +39,14 @@ async function renderFirmware(soft) {
     $("#fw-jobs").innerHTML = jobsPanel();
     $("#fw-lib").innerHTML = libraryTable();
     $("#fw-src").innerHTML = sourceLine(set);
+    $("#fw-libbtns").innerHTML = libraryButtons(set);
     return;
   }
   $("#main").innerHTML = `<div class="page">
     <div class="head"><h1>Firmware</h1><span class="grow"></span><span class="muted" style="font-size:13px" id="fw-src">${sourceLine(set)}</span></div>
     <div id="fw-updates">${updatesPanel()}</div>
     <div id="fw-jobs">${jobsPanel()}</div>
-    <section class="panel"><h2>Library<span class="grow"></span>
-        <button class="btn small" onclick="call('OpenFirmwareFolder')">Open folder</button>
-        <button class="btn small primary" onclick="addFirmwareFiles()">${ICON.plus}Add files</button></h2>
+    <section class="panel"><h2>Library<span class="grow"></span><span id="fw-libbtns" style="display:contents">${libraryButtons(set)}</span></h2>
       <div class="body" style="padding-bottom:6px">
         <form class="row" style="align-items:center" onsubmit="downloadFirmware(event)">
           <input type="text" id="fw-url" placeholder="Paste a download link: a Release_….zip from grandstream.com/support/firmware, or a …fw.bin" autocomplete="off" spellcheck="false">
@@ -55,6 +55,35 @@ async function renderFirmware(soft) {
         <p class="faint" style="font-size:12.5px;margin:8px 0 6px">Grandstream publishes firmware freely. Add the release zip or the .bin image; the version comes from the file name, and you're asked for it when it can't be read. Each phone is offered the newest image for its family (a GRP2613 uses grp2610fw.bin, a GXP2170 uses gxp2130fw.bin).</p>
       </div>
       <div id="fw-lib">${libraryTable()}</div></section></div>`;
+}
+
+function libraryButtons(set) {
+  const relay = (set || S.settings || {}).firmwareSource === "relay";
+  return `${relay ? `<button class="btn small" onclick="syncRelay()" ${FW.syncing ? "disabled" : ""}>${FW.syncing ? "Copying…" : "Copy library to relay"}</button>` : ""}
+    <button class="btn small" onclick="call('OpenFirmwareFolder')">Open folder</button>
+    <button class="btn small primary" onclick="addFirmwareFiles()">${ICON.plus}Add files</button>`;
+}
+
+// relayCell shows whether an image has been copied to the relay server.
+function relayCell(file) {
+  const r = FW.relay[file];
+  if (!r) return `<span class="faint" title="Not copied yet. It's copied when an update needs it, or with Copy library to relay.">not copied</span>`;
+  const t = esc(r.message || "");
+  if (r.state === "synced") return `<span class="ok" title="${t}">on relay</span>`;
+  if (r.state === "copying") return `<span class="fwchip busy">copying…</span>`;
+  return `<span class="bad" title="${t}">copy failed</span>`;
+}
+
+async function syncRelay(files) {
+  if (FW.syncing) return;
+  FW.syncing = true;
+  if ($("#fw-libbtns")) $("#fw-libbtns").innerHTML = libraryButtons();
+  try {
+    await call("SyncRelay", files || []);
+    toast("Library copied to the relay server");
+  } catch (e) { toast(e.message, true); }
+  FW.syncing = false;
+  renderFirmware(true);
 }
 
 function sourceLine(set) {
@@ -118,10 +147,12 @@ function libraryTable() {
   if (!FW.images.length) return `<div class="empty" style="padding:22px">No images yet.</div>`;
   const used = {};
   for (const v of S.dash?.phones || []) if (v.firmware?.family) used[v.firmware.family] = (used[v.firmware.family] || 0) + 1;
-  return `<table><thead><tr><th>File</th><th>Family</th><th>Version</th><th>For</th><th class="num">Size</th><th>Added</th><th>From</th><th></th></tr></thead><tbody>
+  const relay = (S.settings || {}).firmwareSource === "relay";
+  return `<table><thead><tr><th>File</th><th>Family</th><th>Version</th><th>For</th><th class="num">Size</th><th>Added</th><th>From</th>${relay ? "<th>Relay</th>" : ""}<th></th></tr></thead><tbody>
     ${FW.images.map((i) => `<tr><td class="mono">${esc(i.file)}</td><td class="mono">${esc(i.family)}</td><td class="mono">${esc(i.version.text)}</td>
       <td class="muted">${used[i.family] ? phonesWord(used[i.family]) + " of yours" : `<span class="faint">none of your phones</span>`}</td>
       <td class="num">${mb(i.size)}</td><td class="faint">${ago(i.addedAt)}</td><td class="faint">${esc(i.source === "file" ? "added file" : i.source === "zip" ? "release zip" : i.source)}</td>
+      ${relay ? `<td style="font-size:13px">${relayCell(i.file)}${FW.relay[i.file]?.state === "failed" && !FW.syncing ? ` <a onclick="syncRelay(['${esc(i.file)}'])" style="font-size:12.5px">retry</a>` : ""}</td>` : ""}
       <td style="text-align:right"><button class="ib danger" title="Delete" onclick="deleteFirmware('${esc(i.file)}')">${ICON.trash}</button></td></tr>`).join("")}
     </tbody></table>`;
 }
@@ -179,7 +210,7 @@ async function downloadFirmware(e) {
       // the file is in the library's download folder; ask and add it from there
       FW.dl = null; drawDl();
       if ($("#fw-dl")) $("#fw-dl").textContent = "Download";
-      const ver = prompt("The link doesn't say which version this is. Type it (like 1.0.13.31):");
+      const ver = await askText("Which version is this?", "The link doesn't say. Type the version from Grandstream's download page or release notes.", "1.0.13.31", "Download");
       if (ver) {
         FW.dl = { done: 0, total: -1 }; drawDl();
         try { const img = await call("DownloadFirmware", url, "", ver); toast(`Downloaded ${img.family} ${img.version.text}`); $("#fw-url").value = ""; } catch (e2) { toast(e2.message, true); }
@@ -204,7 +235,7 @@ function drawDl() {
 }
 
 async function deleteFirmware(file) {
-  if (!confirm(`Delete ${file} from the library?`)) return;
+  if (!(await ask(`Delete ${file} from the library?`, "Delete", true))) return;
   try { await call("DeleteFirmware", file); } catch (e) { toast(e.message, true); }
   S.dash = await call("GetDashboard");
   renderFirmware(true);

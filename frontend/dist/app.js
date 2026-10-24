@@ -322,7 +322,7 @@ async function setDisabled(ids, disabled) {
 async function deletePhones(ids) {
   if (!ids.length) return;
   const what = ids.length === 1 ? nameOf(ids[0]) : phonesWord(ids.length);
-  if (!confirm(`Delete ${what} from PhoneDesk, with the saved copies of their settings? The phones themselves aren't changed.`)) return;
+  if (!(await ask(`Delete ${what} from PhoneDesk, with the saved copies of their settings? The phones themselves aren't changed.`, "Delete", true))) return;
   try {
     await call("DeletePhones", ids);
     ids.forEach((id) => S.sel.delete(id));
@@ -343,7 +343,7 @@ async function refreshSel() {
 async function rebootPhones(ids) {
   if (!ids.length) return;
   const what = ids.length === 1 ? nameOf(ids[0]) : phonesWord(ids.length);
-  if (!confirm(`Reboot ${what}? Calls in progress will drop.`)) return;
+  if (!(await ask(`Reboot ${what}? Calls in progress will drop.`, "Reboot"))) return;
   let ok = 0;
   const errs = [];
   for (const id of ids) {
@@ -690,6 +690,38 @@ function modal(html, wide) {
   setTimeout(() => v.querySelector("input:not([disabled]):not([type=checkbox]):not([type=radio]),select,textarea")?.focus(), 30);
   return v;
 }
+// ask replaces window.confirm, which the app's web view doesn't show.
+function ask(text, okLabel = "OK", danger = false) {
+  return new Promise((resolve) => {
+    const m = modal(`<div class="body"><p style="margin:0;font-size:14.5px;line-height:1.5">${esc(text)}</p></div>
+      <div class="foot"><span class="grow"></span><button class="btn" id="askno">Cancel</button><button class="btn ${danger ? "danger" : "primary"}" id="askok">${esc(okLabel)}</button></div>`);
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; resolve(v); };
+    $("#askok", m).onclick = () => { finish(true); $(".veil")?.remove(); S.modalOpen = false; };
+    $("#askno", m).onclick = () => { finish(false); closeModal(); };
+    m.addEventListener("click", (e) => { if (e.target === m) finish(false); });
+    setTimeout(() => $("#askok", m)?.focus(), 30);
+    const esc_ = (e) => { if (e.key === "Escape") { finish(false); document.removeEventListener("keydown", esc_); } if (e.key === "Enter" && S.modalOpen && $("#askok")) { $("#askok").click(); document.removeEventListener("keydown", esc_); } };
+    document.addEventListener("keydown", esc_);
+  });
+}
+
+// askText asks for one line of text; resolves "" when dismissed.
+function askText(title, text, placeholder = "", okLabel = "OK") {
+  return new Promise((resolve) => {
+    const m = modal(`<h2>${esc(title)}</h2><div class="body"><p class="muted" style="margin-top:0;font-size:13px">${esc(text)}</p>
+      <input type="text" id="asktxt" class="mono" placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false"></div>
+      <div class="foot"><span class="grow"></span><button class="btn" id="askno">Cancel</button><button class="btn primary" id="askok">${esc(okLabel)}</button></div>`);
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; resolve(v); };
+    $("#askok", m).onclick = () => { finish($("#asktxt", m).value.trim()); closeModal(); };
+    $("#askno", m).onclick = () => { finish(""); closeModal(); };
+    m.addEventListener("click", (e) => { if (e.target === m) finish(""); });
+    $("#asktxt", m).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#askok", m).click(); } if (e.key === "Escape") { finish(""); closeModal(); } });
+    setTimeout(() => $("#asktxt", m)?.focus(), 30);
+  });
+}
+
 function closeModal() {
   $(".veil")?.remove();
   if (S.modalOpen) { S.modalOpen = false; refreshData(); }
@@ -755,7 +787,7 @@ async function openPhoneModal(ph) {
     } catch (err) { msg(err.message); }
   };
   if (ph) $("#sdel", m).onclick = async () => {
-    if (!confirm(`Remove ${nameOfView(ph)} and its saved copies from PhoneDesk? The phone itself isn't changed.`)) return;
+    if (!(await ask(`Remove ${nameOfView(ph)} and its saved copies from PhoneDesk? The phone itself isn't changed.`, "Remove", true))) return;
     await call("DeletePhone", ph.id);
     closeModal();
     location.hash = "#/phones";
@@ -1057,7 +1089,7 @@ async function openImport() {
   };
   $("#igo", m).onclick = async () => {
     const mode = $("input[name=im]:checked", m).value;
-    if (mode === "replace" && !confirm("Replace all phones, credentials, templates and settings on this computer with the file's contents?")) return;
+    if (mode === "replace" && !(await ask("Replace all phones, credentials, templates and settings on this computer with the file's contents?", "Replace everything", true))) return;
     try {
       const r = await call("ImportData", path, $("#ip", m).value, mode);
       closeModal();
@@ -1139,6 +1171,7 @@ async function boot() {
   S.dash = await call("GetDashboard");
   window.runtime?.EventsOn?.("changed", () => refreshData().catch(() => {}));
   window.runtime?.EventsOn?.("firmware-download", (p) => { if (FW.dl) { FW.dl = p; drawDl(); } });
+  window.runtime?.EventsOn?.("relay-sync", (p) => { FW.relay[p.file] = { state: p.state, message: p.message }; if ($("#fw-lib")) $("#fw-lib").innerHTML = libraryTable(); });
   window.runtime?.EventsOn?.("update-available", showUpdate);
   call("LastUpdateCheck").then((u) => u && showUpdate(u)).catch(() => {});
   const notice = await call("StartupNotice").catch(() => "");

@@ -39,9 +39,12 @@ docs                   this guide (MkDocs)
 Everything goes through the phone's own web interface, the same endpoints its web pages use:
 
 - `POST /cgi-bin/dologin` with the admin login returns a session id.
-- `POST /cgi-bin/api.values.get` with `request=P47:P35:…` returns the values, 50 keys per batch. Status keys such as `prog`, `mac` and `Pphone_model` come the same way.
+- `POST /cgi-bin/api.values.get` with `request=P47:P35:…` returns the values, 50 keys per batch. Status keys such as `prog`, `mac` and `Pphone_model` come the same way; GXP16xx/21xx firmware answers numbered ones instead (`P68` program version, `P69` boot, `P70` core, `P45` base, `P67` MAC, `Pipv4`), so both sets are asked for.
+- `GET /cgi-bin/api-get_time` returns the phone's clock and uptime on firmware that doesn't answer the `uptime` key.
 - `POST /cgi-bin/api.values.post` writes P-values. The phone validates the batch as a whole.
 - `GET /cgi-bin/api-get_line_status` returns each line's state, and `api-sys_operation?request=REBOOT` reboots. These remote-control endpoints need Action URI support on the phone.
+
+Every request carries `Referer` and `Origin` headers naming the phone, because GXP firmware answers 403 without them. The window is a WKWebView on a Mac, which doesn't show `confirm()` or `prompt()` boxes: use `ask()` and `askText()` from `app.js`.
 
 `internal/grandstream/parse.go` turns the raw values into a snapshot and is deliberately tolerant: each fact is taken from the first of several keys that has something in it, because firmware differs in what it answers. Reads are recorded request by request and shown on the Raw output tab.
 

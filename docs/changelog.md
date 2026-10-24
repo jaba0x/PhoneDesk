@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4
+
+- Delete works again: the library's delete button, Delete on phones, Remove on a phone's page, deleting templates and the "replace" import all asked with the browser's own confirm box, which the Mac window never shows, so the click quietly did nothing. They now ask with PhoneDesk's own dialog. Same for the version question after a download whose link doesn't say.
+- GXP16xx and GXP21xx phones show their firmware, boot, core and base versions, MAC, address and uptime. Their status page answers with numbered keys (`P68` for the program version, `P67` for the MAC, and so on) instead of named ones, so the Firmware page said "No phones read yet" for a fleet of GXPs and never offered an update. Uptime comes from `api-get_time` when the phone doesn't answer the `uptime` key.
+- Images added as "GXP1625" or "gxp1625" land under the right family (`gxp1600`), and an index with old entries is fixed when the library opens.
+- With the SSH relay as the firmware source, an image added to the library (file, release zip or download) is copied to the relay server right away, so the update itself doesn't wait on the copy. The library shows which images are on the relay, with **Copy library to relay** for everything at once and a retry on failed copies.
+
 ## 0.1.3
 
 - Choosing the SSH relay as the firmware source now sticks. 0.1.2 quietly reset it to "this computer" on save, so the Firmware page kept showing the old source.

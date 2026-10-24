@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jaba0x/phonedesk/internal/grandstream"
 )
 
 // Image is one firmware file in the library. It's stored as
@@ -43,6 +45,17 @@ type Library struct {
 	idx map[string]Image
 }
 
+// NormalizeFamily turns whatever names a family (a model such as GXP1625, a
+// family such as gxp1600, in any case) into the family the phones download:
+// a GXP1625 fetches gxp1600fw.bin, so its family is gxp1600.
+func NormalizeFamily(f string) string {
+	f = strings.TrimSpace(f)
+	if f == "" {
+		return ""
+	}
+	return grandstream.Family(f)
+}
+
 // ErrNeedVersion is returned when a file's version can't be read from its
 // name; the caller should ask the user and try again with AddFileAs.
 var ErrNeedVersion = errors.New("version unknown")
@@ -54,6 +67,18 @@ func OpenLibrary(dir string) (*Library, error) {
 	l := &Library{dir: dir, idx: map[string]Image{}}
 	if b, err := os.ReadFile(filepath.Join(dir, "index.json")); err == nil {
 		json.Unmarshal(b, &l.idx)
+	}
+	// families recorded by an earlier version from a model name ("GXP1625")
+	fixed := false
+	for k, img := range l.idx {
+		if nf := NormalizeFamily(img.Family); nf != "" && nf != img.Family {
+			img.Family = nf
+			l.idx[k] = img
+			fixed = true
+		}
+	}
+	if fixed {
+		l.saveLocked()
 	}
 	l.reconcile()
 	return l, nil
@@ -86,7 +111,7 @@ func (l *Library) reconcile() {
 		if _, ok := l.idx[e.Name()]; ok {
 			continue
 		}
-		fam, ver := FamilyFromFile(e.Name()), Version{}
+		fam, ver := NormalizeFamily(FamilyFromFile(e.Name())), Version{}
 		if v, ok := ParseVersion(e.Name()); ok {
 			ver = v
 		}
@@ -163,8 +188,9 @@ func (l *Library) Path(file string) (string, error) {
 func (l *Library) Latest(family string) (Image, bool) {
 	var best Image
 	found := false
+	family = NormalizeFamily(family)
 	for _, img := range l.List() {
-		if img.Family == family && (!found || img.Version.Newer(best.Version)) {
+		if NormalizeFamily(img.Family) == family && (!found || img.Version.Newer(best.Version)) {
 			best, found = img, true
 		}
 	}
@@ -183,6 +209,7 @@ func (l *Library) AddFile(src string) (Image, error) {
 func (l *Library) AddFileAs(src, family, version string) (Image, error) {
 	name := filepath.Base(src)
 	lower := strings.ToLower(name)
+	family = NormalizeFamily(family)
 	var ver Version
 	if version != "" {
 		v, ok := ParseVersion(version)
@@ -198,7 +225,7 @@ func (l *Library) AddFileAs(src, family, version string) (Image, error) {
 		return l.addZip(src, family, ver)
 	case strings.HasSuffix(lower, ".bin"):
 		if family == "" {
-			family = FamilyFromFile(name)
+			family = NormalizeFamily(FamilyFromFile(name))
 		}
 		if family == "" {
 			return Image{}, fmt.Errorf("can't tell which phones %s is for; Grandstream names images like grp2610fw.bin", name)
@@ -228,7 +255,7 @@ func (l *Library) addZip(src, family string, ver Version) (Image, error) {
 		return Image{}, errors.New("the zip holds no .bin firmware image")
 	}
 	if family == "" {
-		family = FamilyFromFile(path.Base(bin.Name))
+		family = NormalizeFamily(FamilyFromFile(path.Base(bin.Name)))
 	}
 	if family == "" {
 		return Image{}, fmt.Errorf("can't tell which phones %s is for", path.Base(bin.Name))

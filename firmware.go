@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	goruntime "runtime"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -67,6 +68,7 @@ func (a *App) AddFirmwareFiles() (AddResult, error) {
 		res.Added = append(res.Added, img)
 	}
 	a.emit("")
+	a.syncRelayLater(res.Added)
 	return res, nil
 }
 
@@ -80,6 +82,7 @@ func (a *App) AddFirmwareFileAs(path, family, version string) (firmware.Image, e
 	img, err := l.AddFileAs(path, family, version)
 	if err == nil {
 		a.emit("")
+		a.syncRelayLater([]firmware.Image{img})
 	}
 	return img, err
 }
@@ -116,6 +119,7 @@ func (a *App) DownloadFirmware(link, family, version string) (firmware.Image, er
 	})
 	if err == nil {
 		a.emit("")
+		a.syncRelayLater([]firmware.Image{img})
 	}
 	if errors.Is(err, context.Canceled) {
 		err = errors.New("cancelled")
@@ -156,6 +160,33 @@ func (a *App) OpenFirmwareFolder() error {
 }
 
 // ---- updates ----
+
+// syncRelayLater copies freshly added images to the relay server in the
+// background when that's the firmware source, reporting with "relay-sync" events.
+func (a *App) syncRelayLater(imgs []firmware.Image) {
+	if len(imgs) == 0 || a.st.Settings().FirmwareSource != "relay" {
+		return
+	}
+	files := make([]string, 0, len(imgs))
+	for _, img := range imgs {
+		files = append(files, img.File)
+	}
+	go a.mgr.SyncRelay(a.ctx, files, func(file, state, msg string) {
+		runtime.EventsEmit(a.ctx, "relay-sync", map[string]string{"file": file, "state": state, "message": msg})
+	})
+}
+
+// SyncRelay copies the whole library (or the given files) to the relay server.
+func (a *App) SyncRelay(files []string) error {
+	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Minute)
+	defer cancel()
+	return a.mgr.SyncRelay(ctx, files, func(file, state, msg string) {
+		runtime.EventsEmit(a.ctx, "relay-sync", map[string]string{"file": file, "state": state, "message": msg})
+	})
+}
+
+// RelayStates reports which images are on the relay server.
+func (a *App) RelayStates() map[string]core.RelayState { return a.mgr.RelayStates() }
 
 // StartUpgrade queues firmware updates; image "" picks the newest matching one.
 func (a *App) StartUpgrade(ids []string, image string) ([]core.Job, error) {

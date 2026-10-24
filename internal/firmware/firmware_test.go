@@ -129,3 +129,24 @@ func TestLibrary(t *testing.T) {
 		t.Fatal("escape accepted")
 	}
 }
+
+// A file or a typed family that names a model lands in the family the phone
+// downloads: GXP1625 fetches gxp1600fw.bin.
+func TestFamilyFromModelName(t *testing.T) {
+	for in, want := range map[string]string{"GXP1625": "gxp1600", "gxp1625": "gxp1600", "gxp1600": "gxp1600", "GRP2613": "grp2610", "grp2610": "grp2610", "GXP2170": "gxp2130", "": ""} {
+		if got := NormalizeFamily(in); got != want {
+			t.Errorf("NormalizeFamily(%q) = %q, want %q", in, got, want)
+		}
+	}
+	dir := t.TempDir()
+	src := filepath.Join(t.TempDir(), "GXP1625fw-1.0.7.81.bin")
+	os.WriteFile(src, []byte("not really firmware"), 0o600)
+	l, _ := OpenLibrary(dir)
+	img, err := l.AddFileAs(src, "GXP1625", "")
+	if err != nil || img.Family != "gxp1600" || img.Version.Text != "1.0.7.81" {
+		t.Fatalf("add: %+v %v", img, err)
+	}
+	if _, ok := l.Latest("gxp1600"); !ok {
+		t.Fatal("GXP1625 image not offered to the gxp1600 family")
+	}
+}

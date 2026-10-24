@@ -433,6 +433,15 @@ func (m *Manager) read(ctx context.Context, p store.Phone) (grandstream.Snapshot
 	if err != nil {
 		return grandstream.Snapshot{}, fmt.Errorf("reading settings: %w", err)
 	}
+	if _, ok := values["uptime"]; !ok {
+		if t, err := c.Time(ctx); err == nil {
+			for _, k := range []string{"uptime", "time", "date"} {
+				if v := t[k]; v != "" {
+					values[k] = v
+				}
+			}
+		}
+	}
 	var errs []string
 	lines, lerr := c.LineStatus(ctx)
 	if lerr != nil {

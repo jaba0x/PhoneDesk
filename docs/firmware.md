@@ -6,8 +6,10 @@
 
 The library is a folder of firmware images, kept in your data folder. Fill it two ways:
 
-- **Add files**: pick `.bin` images you downloaded.
+- **Add files**: pick `.bin` images or `Release_….zip` archives you downloaded. A zip is unpacked and the image taken out.
 - **Download**: paste a link from [Grandstream's firmware page](https://www.grandstream.com/support/firmware). A `Release_….zip` is unpacked and the image taken out; a bare `…fw.bin` link is saved as is.
+
+Either works; the zip is the handier one, because its name carries the version. Keep Grandstream's file names.
 
 The version is read from the file name (`grp2610fw-1.0.13.31.bin`, `Release_GRP261x_1.0.13.31.zip`). When it can't be read, you're asked for it. Images are matched to phones by firmware family, which is what the phone itself downloads: a GRP2613 fetches `grp2610fw.bin`, a GXP2170 fetches `gxp2130fw.bin`, a GXP1628 fetches `gxp1600fw.bin`. Each phone is offered the newest image for its family.
 
@@ -36,7 +38,7 @@ Set in **Settings → Where phones fetch firmware from**:
 
 **Another server.** A provisioning or web server of your own, as `host` or `host/folder`, over HTTP, HTTPS or TFTP. Put the images there under their family names (`grp2610fw.bin`).
 
-**A server the phones can reach, filled over SSH.** For zero trust access and one-way VPNs, where you can reach the phones but they can't reach you. You give PhoneDesk an SSH login to a server on the phones' network (a FreePBX box already runs a TFTP server for provisioning), the folder images should land in, and the path phones use to reach that folder. Before each update PhoneDesk copies the image over SSH to `folder/phonedesk/<version>/<family>fw.bin`, skipping the copy when the same file is already there, then points the phone at `path/phonedesk/<version>` over TFTP, HTTP or HTTPS. Nothing has to reach your computer.
+**A server the phones can reach, filled over SSH.** For zero trust access and one-way VPNs, where you can reach the phones but they can't reach you. You give PhoneDesk an SSH login to a server on the phones' network (a FreePBX box already runs a TFTP server for provisioning), the folder images should land in, and the path phones use to reach that folder. Before each update PhoneDesk copies the image over SSH to `folder/phonedesk/<version>/<family>fw.bin`, skipping the copy when the same file is already there, then points the phone at `path/phonedesk/<version>` over TFTP, HTTP or HTTPS. Nothing has to reach your computer. While the relay is the source, every image you add to the library is copied to the server right away, and the library's **Relay** column says which ones are there; **Copy library to relay** copies everything that isn't yet.
 
 For FreePBX: SSH host is the PBX address, folder `/tftpboot`, path phones use is the PBX address again, via TFTP. The SSH user needs write access to `/tftpboot` (root does). **Test relay** in Settings connects, checks the folder is writable and shows the server's host key, which is pinned from then on: if the server is reinstalled and its key changes, PhoneDesk refuses to connect until you click **Forget host key** in Settings. A password is stored encrypted like the phone passwords; a private key file can be used instead of or together with it.
 

@@ -446,6 +446,33 @@ func (c *Client) PhoneStatus(ctx context.Context) (string, error) {
 	return rawString(r.Body), nil
 }
 
+// Time reads the phone's clock and uptime from api-get_time, which GXP16xx
+// and GXP21xx firmware uses for its own System Info page. Missing on some
+// firmware; the caller treats an error as "no uptime".
+func (c *Client) Time(ctx context.Context) (map[string]string, error) {
+	sid, scheme, err := c.session()
+	if err != nil {
+		return nil, err
+	}
+	r, text, err := c.do(ctx, "GET", scheme, "/cgi-bin/api-get_time", url.Values{"sid": {sid}}, true)
+	if err != nil {
+		return nil, err
+	}
+	c.record("api-get_time", text)
+	if r.Response != "success" {
+		return nil, apiError{Body: strings.Trim(string(r.Body), `"`)}
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(r.Body, &m); err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for k, v := range m {
+		out[k] = rawString(v)
+	}
+	return out, nil
+}
+
 // LineStatus reads the live state of every line key.
 func (c *Client) LineStatus(ctx context.Context) ([]Line, error) {
 	r, err := c.cti(ctx, "/cgi-bin/api-get_line_status", nil)

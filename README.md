@@ -11,7 +11,7 @@
   <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%7C%2011-1b212b?style=flat-square&logo=windows&logoColor=white">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.23+-1b212b?style=flat-square&logo=go&logoColor=white">
   <img alt="Wails" src="https://img.shields.io/badge/Wails-v2-1b212b?style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.3-4cc38a?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.4-4cc38a?style=flat-square">
 </p>
 
 <p align="center">
@@ -69,11 +69,11 @@ The same template can be exported as `cfg<mac>.xml` files, one per phone, for a 
 Every SIP account across all phones in one table: extension, display name, which phone it's on, and whether it's registered. Search it to find out which desk 214 sits on.
 
 ### Firmware updates
-Add `.bin` images to the library, or paste a download link from Grandstream's firmware page: a `Release_….zip` or a bare `…fw.bin` both work, and the version is read from the file name. Images are matched to phones by firmware family, so a GRP2613 is offered `grp2610fw.bin` and a GXP2170 `gxp2130fw.bin`. Phones with something newer in the library are listed on the Firmware page; tick them and update.
+Add `.bin` images or Grandstream's `Release_….zip` archives to the library, or paste a download link from Grandstream's firmware page: a `Release_….zip` or a bare `…fw.bin` both work, and the version is read from the file name. Images are matched to phones by firmware family, so a GRP2613 is offered `grp2610fw.bin` and a GXP2170 `gxp2130fw.bin`. Phones with something newer in the library are listed on the Firmware page; tick them and update.
 
 Grandstream phones fetch firmware themselves, so for an update PhoneDesk points the phone at an image, reboots it, waits for it to download and install, and checks that it came back on the new version. Then the phone's previous upgrade settings are put back. Phones are updated one after another, so a bad image can't take a whole office down at once.
 
-By default the image is served from your computer over HTTP (port 6970, changeable), which means the phone has to be able to reach your computer. When it can't, over zero trust access or a one-way VPN, pick the SSH relay instead: PhoneDesk copies the image over SSH to a server the phones can reach (a FreePBX box with its TFTP root, say) and points the phones at that. Or point them at `firmware.grandstream.com` or a server you fill yourself.
+By default the image is served from your computer over HTTP (port 6970, changeable), which means the phone has to be able to reach your computer. When it can't, over zero trust access or a one-way VPN, pick the SSH relay instead: PhoneDesk copies every image you add over SSH to a server the phones can reach (a FreePBX box with its TFTP root, say) and points the phones at that. Or point them at `firmware.grandstream.com` or a server you fill yourself.
 
 ### Phone list
 Search by name, extension, address, site, model, firmware or MAC, or by state: `offline`, `disabled`, `unregistered`, `problem`, `update`. Press `/` to jump to the search box. Tick phones to read, reboot, apply a template, update, disable, enable or delete them together, or use the small buttons at the end of each row. A disabled phone keeps its last data but isn't checked, read or alerted on until you enable it again.

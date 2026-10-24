@@ -42,6 +42,7 @@ type upgrader struct {
 	jobs    []*Job
 	queue   chan *Job
 	fetches map[string]chan struct{} // server token -> closed when the phone fetched the image
+	relay   map[string]RelayState    // library file -> copy state on the relay server
 }
 
 func (u *upgrader) jobFor(phoneID string) *Job {
@@ -435,6 +436,99 @@ func (m *Manager) relayDial(ctx context.Context, set store.Settings) (*relay.Cli
 	return c, nil
 }
 
+// RelayState says whether an image has been copied to the relay server.
+type RelayState struct {
+	State   string    `json:"state"` // copying, synced, failed
+	Message string    `json:"message"`
+	At      time.Time `json:"at"`
+}
+
+func (m *Manager) setRelayState(file, state, msg string) {
+	m.up.mu.Lock()
+	if m.up.relay == nil {
+		m.up.relay = map[string]RelayState{}
+	}
+	m.up.relay[file] = RelayState{State: state, Message: msg, At: time.Now()}
+	m.up.mu.Unlock()
+	m.changed()
+}
+
+// RelayStates returns the copy state of every image, by file name.
+func (m *Manager) RelayStates() map[string]RelayState {
+	m.up.mu.Lock()
+	defer m.up.mu.Unlock()
+	out := make(map[string]RelayState, len(m.up.relay))
+	for k, v := range m.up.relay {
+		out[k] = v
+	}
+	return out
+}
+
+// SyncRelay copies the given library images (all of them when files is
+// empty) to the relay server, so an update doesn't have to. progress is
+// called after each file.
+func (m *Manager) SyncRelay(ctx context.Context, files []string, progress func(file, state, msg string)) error {
+	set := m.st.Settings()
+	if set.FirmwareSource != "relay" {
+		return errors.New("the relay isn't the firmware source")
+	}
+	if m.lib == nil {
+		return errors.New("the firmware library couldn't be opened")
+	}
+	if len(files) == 0 {
+		for _, img := range m.lib.List() {
+			files = append(files, img.File)
+		}
+	}
+	if len(files) == 0 {
+		return nil
+	}
+	report := func(file, state, msg string) {
+		m.setRelayState(file, state, msg)
+		if progress != nil {
+			progress(file, state, msg)
+		}
+	}
+	for _, f := range files {
+		report(f, "copying", "")
+	}
+	c, err := m.relayDial(ctx, set)
+	if err != nil {
+		for _, f := range files {
+			report(f, "failed", err.Error())
+		}
+		return err
+	}
+	defer c.Close()
+	var firstErr error
+	for _, f := range files {
+		img, ok := m.lib.Get(f)
+		if !ok {
+			report(f, "failed", "not in the library")
+			continue
+		}
+		local, err := m.lib.Path(f)
+		if err != nil {
+			report(f, "failed", err.Error())
+			continue
+		}
+		dir := pathpkg.Join(set.RelayDir, "phonedesk", img.Version.Text)
+		copied, err := c.Upload(ctx, local, dir, grandstream.FirmwareFile(img.Family))
+		switch {
+		case err != nil:
+			report(f, "failed", err.Error())
+			if firstErr == nil {
+				firstErr = err
+			}
+		case copied:
+			report(f, "synced", "copied to "+dir)
+		default:
+			report(f, "synced", "already on the server")
+		}
+	}
+	return firstErr
+}
+
 // TestRelay connects to the relay server described by set (an empty password
 // means the stored one) and checks the remote folder is writable.
 func (m *Manager) TestRelay(set store.Settings) (string, error) {
@@ -493,12 +587,15 @@ func (m *Manager) firmwareSource(ctx context.Context, set store.Settings, p stor
 		defer c.Close()
 		copied, err := c.Upload(ctx, local, dir, name)
 		if err != nil {
+			m.setRelayState(image, "failed", err.Error())
 			return "", "", "", err
 		}
 		if copied {
 			m.jobLog(j, "", 0.04, "Copied %s to the relay server", name)
+			m.setRelayState(image, "synced", "copied to "+dir)
 		} else {
 			m.jobLog(j, "", 0.04, "%s is already on the relay server", name)
+			m.setRelayState(image, "synced", "already on the server")
 		}
 		return set.RelayServerPath + "/phonedesk/" + j.To, viaCode(set.RelayVia), "", nil
 	}

@@ -140,11 +140,15 @@ func init() {
 
 // StatusKeys are the non-P keys the web UI asks the phone for. Not every
 // firmware answers all of them; whatever comes back is kept in the snapshot.
+// StatusKeys are read along with the settings. GRP phones answer the named
+// keys; GXP16xx/21xx firmware keeps the same facts under P-numbers, which is
+// what their own status pages ask for (P68 prog, P67 MAC, Pipv4 address).
 var StatusKeys = []string{
 	"vendor_name", "vendor_fullname", "phone_model", "Pphone_model", "product_model",
 	"prog", "prog_version", "boot", "core", "base", "dsp", "recovery",
 	"mac", "ip", "ipaddr", "netmask", "gateway", "dns1", "dns2",
 	"uptime", "sysuptime", "system_uptime", "hwversion", "pn", "serial",
+	"P68", "P69", "P70", "P45", "P7033", "P67", "Pipv4", "PIPStatus", "Psubnet_web", "Pgateway_web", "Pdns1_web", "Pdns2_web", "P1397",
 }
 
 // CollectKeys is everything asked from a phone in one read: the known

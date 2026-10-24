@@ -22,15 +22,15 @@ func Build(values map[string]string, lines []Line, linesKnown bool) Snapshot {
 	f.Vendor = first("vendor_fullname", "vendor_name")
 	f.Model = NormalizeModel(first("Pphone_model", "phone_model", "product_model"))
 	f.Family = Family(f.Model)
-	f.Firmware = first("prog", "prog_version", "68")
-	f.Boot = first("boot")
-	f.Core = first("core")
-	f.Base = first("base")
+	f.Firmware = first("prog", "prog_version", "P68")
+	f.Boot = first("boot", "P69")
+	f.Core = first("core", "P70")
+	f.Base = first("base", "P45")
 	f.DSP = first("dsp")
-	f.MAC = NormalizeMAC(first("mac"))
-	f.IP = first("ip", "ipaddr")
+	f.MAC = NormalizeMAC(first("mac", "P67"))
+	f.IP = first("ip", "ipaddr", "Pipv4")
 	f.Hardware = first("hwversion")
-	f.PN = first("pn")
+	f.PN = first("pn", "P1397")
 	f.Uptime = first("uptime", "sysuptime", "system_uptime")
 
 	for i, a := range Accounts {
@@ -78,6 +78,9 @@ func Build(values map[string]string, lines []Line, linesKnown bool) Snapshot {
 	}
 
 	s.Network.AddressType = Display(PDHCP, values[PDHCP])
+	if s.Network.AddressType == "" && values["PIPStatus"] != "" {
+		s.Network.AddressType = Display(PDHCP, values["PIPStatus"]) // GXP status page key
+	}
 	if s.Network.AddressType == "" {
 		s.Network.AddressType = ""
 	}
