@@ -165,6 +165,12 @@ func (c *Client) do(ctx context.Context, method, scheme, path string, form url.V
 	}
 	req.Header.Set("User-Agent", "PhoneDesk")
 	req.Header.Set("Accept", "application/json, */*")
+	// GXP16xx/21xx firmware refuses API calls that don't look like they come
+	// from the phone's own web page (HTTP 403 "Forbidden"), so send what a
+	// browser would.
+	req.Header.Set("Referer", c.base(scheme)+"/")
+	req.Header.Set("Origin", c.base(scheme))
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
 	if withSession && c.sid != "" {
 		req.Header.Set("Cookie", "session-role=admin; session-identity="+c.sid)
 	}
@@ -222,7 +228,9 @@ func (c *Client) Login(ctx context.Context) error {
 		}
 		c.record("dologin ("+scheme+")", redactSID(text))
 		if r.Response != "success" {
-			if strings.Contains(strings.ToLower(string(r.Body)), "unauthor") || strings.Contains(strings.ToLower(string(r.Body)), "password") || strings.Contains(strings.ToLower(string(r.Body)), "login") {
+			// GRP answers "unauthorized"; GXP16xx/21xx answer "wrong" with the attempt count ("wrong3")
+			lb := strings.ToLower(string(r.Body))
+			if strings.Contains(lb, "unauthor") || strings.Contains(lb, "wrong") || strings.Contains(lb, "password") || strings.Contains(lb, "login") {
 				return ErrAuth
 			}
 			return apiError{Body: strings.Trim(string(r.Body), `"`)}

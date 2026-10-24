@@ -30,8 +30,19 @@ func (p *fakePhone) handler() http.Handler {
 		json.NewEncoder(w).Encode(map[string]any{"response": "error", "body": body})
 	}
 	mux.HandleFunc("/cgi-bin/dologin", func(w http.ResponseWriter, r *http.Request) {
+		// a GXP1625 on 1.0.7.13 answers 403 Forbidden (HTML) when the request
+		// doesn't carry the headers its own web page sends
+		if !strings.HasPrefix(r.Header.Get("Referer"), "http://") {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte("<html><body<h1>Forbidden</h1>/body></html>\n"))
+			return
+		}
 		if r.FormValue("password") != "admin" {
-			fail(w, "unauthorized")
+			if p.cookieSID {
+				fail(w, "wrong3")
+			} else {
+				fail(w, "unauthorized")
+			}
 			return
 		}
 		if p.cookieSID {
@@ -281,5 +292,19 @@ func TestAccountRulesAndSwitches(t *testing.T) {
 	d, _ = m.Detail(ph.ID)
 	if len(d.Issues) != 0 {
 		t.Fatalf("issues should all be switched off: %+v", d.Issues)
+	}
+}
+
+// A GXP answers "wrong3" to a bad password; that's a login failure, not a read error.
+func TestAuthFailureGXPWording(t *testing.T) {
+	p := &fakePhone{cookieSID: true, values: map[string]string{}}
+	m, st, ph := setup(t, p)
+	c, _ := st.SaveCredential(store.Credential{Username: "admin", Password: "wrong"})
+	ph.CredentialID = c.ID
+	st.SavePhone(ph)
+	m.collect(ph.ID)
+	d, _ := m.Detail(ph.ID)
+	if !d.Status.AuthFailed {
+		t.Fatalf("expected auth failure, got %+v", d.Status)
 	}
 }

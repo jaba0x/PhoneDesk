@@ -8,6 +8,10 @@ PhoneDesk checks the port it was told to use: 443 for HTTPS, 80 for HTTP, or wha
 
 The admin password was refused. On a fresh phone it's `admin`, and some newer GRP models ship with a random password printed on a sticker on the back. Edit the credentials under Settings, or change the credential set the phone uses under Edit. If you changed `P2` through a template, the new password applies at once; update the credentials to match.
 
+## "unexpected answer from /cgi-bin/dologin (HTTP 403)"
+
+GXP16xx and GXP21xx firmware refuses API calls that don't look like they come from the phone's own web page. PhoneDesk 0.1.1 sends the headers the phone expects; update if you see this.
+
 ## "The phone logged in but sent no session id"
 
 Very old firmware doesn't have the JSON API PhoneDesk uses. Update the phone from its own web page first; everything since the GXP16xx and GXP21xx firmware of the last several years works.
