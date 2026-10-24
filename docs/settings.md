@@ -18,7 +18,7 @@ The phones' web logins. One set can be shared by any number of phones, which is 
 
 ## Checks
 
-The dashboard checks that depend on how your network is set up can be switched off here: the factory password, plain HTTP web access, missing NTP, missing syslog, and DHCP option 66/43 (off by default, since many networks use it on purpose). The other checks always run.
+Every rule the dashboard applies is listed here with its severity, grouped by area, and each one can be switched off. Hover a rule for what it looks at. Everything starts on except DHCP option 66/43, since many networks use it on purpose. A check you switch off stops raising problems on the next read; the phones' data is still collected.
 
 ## Where phones fetch firmware from
 

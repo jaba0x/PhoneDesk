@@ -16,8 +16,8 @@ Every phone is checked against the same rules each time it's read, and the resul
 | Critical | Default admin password | The phone still accepts `admin` / `admin`. Anyone on the network can reconfigure it. |
 | Critical | Telnet is open | TCP 23 answers. |
 | Warning | Reading the phone failed | The phone is up but the read didn't finish. The message has the reason. |
-| Warning | Account N has no SIP server | The account is active but has nowhere to register. |
-| Warning | No active SIP account | The phone can't make or receive calls. |
+| Warning | Account N has no SIP server | The account is active and has a user ID, but nowhere to register. An active account with nothing in it at all (the factory state of account 2 on many GXP phones) isn't flagged. |
+| Warning | No usable SIP account | No active account has a user ID or a server, so the phone can't make or receive calls. |
 | Warning | Web access over plain HTTP | PhoneDesk reached the phone over HTTP, so the admin password travels in clear text. If HTTPS answers too, set the phone to HTTPS in Edit. |
 | Warning | No NTP server | Call history and log timestamps drift; TLS registrations can fail. |
 | Warning | Extension N is on two phones | Two phones register the same extension with the same server. Unless the PBX allows multiple registrations, they knock each other off. |
@@ -27,7 +27,7 @@ Every phone is checked against the same rules each time it's read, and the resul
 | Note | Firmware N is in your library | A newer image for this phone's family is available on the Firmware page. |
 | Note | Data is more than 6 hours old | The phone hasn't been read in a while. |
 
-The password, plain HTTP, NTP, syslog and option 66 checks can be switched off in [Settings](settings.md). The Telnet and SSH checks come from knocking on the ports directly, so they reflect what the phone actually answers, whatever its settings say.
+Every check can be switched off in [Settings](settings.md); option 66 starts off. The Telnet and SSH checks come from knocking on the ports directly, so they reflect what the phone actually answers, whatever its settings say.
 
 ## Phones
 

@@ -45,7 +45,7 @@ func evaluate(p store.Phone, st *Status, snap *grandstream.Snapshot, set store.S
 		out = append(out, Issue{PhoneID: p.ID, PhoneName: name, Severity: sev, Category: cat, Title: title, Detail: detail})
 	}
 
-	if st.Checked && !st.Online {
+	if st.Checked && !st.Online && checkOn(set, "offline") {
 		d := "No answer on the web port"
 		if !st.Since.IsZero() {
 			d += " since " + st.Since.Format("Jan 2 15:04")
@@ -56,43 +56,48 @@ func evaluate(p store.Phone, st *Status, snap *grandstream.Snapshot, set store.S
 		add(Critical, "Reachability", "Phone is offline", d)
 	}
 	if st.AuthFailed {
-		add(Critical, "Login", "Web login failed", st.CollectError+". Fix the credentials, then read again.")
-	} else if st.CollectError != "" && st.Online {
+		if checkOn(set, "login-failed") {
+			add(Critical, "Login", "Web login failed", st.CollectError+". Fix the credentials, then read again.")
+		}
+	} else if st.CollectError != "" && st.Online && checkOn(set, "read-failed") {
 		add(Warning, "Login", "Reading the phone failed", st.CollectError)
 	}
 	if snap == nil || snap.CollectedAt.IsZero() {
 		return out
 	}
 
-	// accounts
-	active := 0
+	// accounts. An active account with nothing in it is the factory state
+	// (GXP phones ship with account 2 switched on and empty), not a problem.
+	usable := 0
 	for _, a := range snap.Accounts {
-		if !a.Active {
+		if !a.Active || (a.UserID == "" && a.AuthID == "" && a.Server == "") {
 			continue
 		}
-		active++
+		usable++
 		label := fmt.Sprintf("Account %d", a.Index)
 		if a.UserID != "" {
 			label += " (" + a.UserID + ")"
 		}
 		if a.Server == "" {
-			add(Warning, "Accounts", label+" has no SIP server", "The account is active but has nowhere to register.")
+			if checkOn(set, "no-server") {
+				add(Warning, "Accounts", label+" has no SIP server", "The account is active and has a user ID, but nowhere to register.")
+			}
 			continue
 		}
-		if a.Registered == 0 {
+		if a.Registered == 0 && checkOn(set, "unregistered") {
 			add(Critical, "Accounts", label+" is not registered", "The phone can't register with "+a.Server+". Check the credentials on the PBX and the phone.")
 		}
 	}
-	if active == 0 {
-		add(Warning, "Accounts", "No active SIP account", "The phone has no account switched on, so it can't make or receive calls.")
+	if usable == 0 && checkOn(set, "no-account") {
+		add(Warning, "Accounts", "No usable SIP account", "No active account has a user ID or a server, so the phone can't make or receive calls.")
 	}
 
 	// web access and management plane
 	sec := snap.Security
-	if sec.DefaultAdmin && set.FlagDefaultPassword {
+	if sec.DefaultAdmin && checkOn(set, "default-password") {
 		add(Critical, "Security", "Default admin password", "The phone still accepts admin/admin. Anyone on the network can reconfigure it. Set P2 from a template or on the phone, then update the credentials here.")
 	}
-	if sec.PlainWeb && set.FlagPlainHTTP {
+	if sec.PlainWeb && checkOn(set, "plain-http") {
 		d := "PhoneDesk reached the web UI over plain HTTP; the admin password travels in clear text."
 		if sec.HTTPSPort == "open" {
 			d += " HTTPS answers too, so set the phone to HTTPS in its address here."
@@ -101,34 +106,37 @@ func evaluate(p store.Phone, st *Status, snap *grandstream.Snapshot, set store.S
 		}
 		add(Warning, "Security", "Web access over plain HTTP", d)
 	}
-	if sec.TelnetPort == "open" {
+	if sec.TelnetPort == "open" && checkOn(set, "telnet") {
 		add(Critical, "Security", "Telnet is open", "The phone accepts connections on TCP 23.")
 	}
-	if sec.SSHPort == "open" {
+	if sec.SSHPort == "open" && checkOn(set, "ssh") {
 		add(Info, "Security", "SSH is open", "The phone accepts connections on TCP 22. Fine if you use it; otherwise switch it off under Maintenance → Web/SSH access.")
 	}
 
 	// time, logging, provisioning
-	if snap.Time.NTPServer == "" && set.FlagNoNTP {
+	if snap.Time.NTPServer == "" && checkOn(set, "no-ntp") {
 		add(Warning, "Settings", "No NTP server", "Without time sync the call history and log timestamps drift, and TLS registrations can fail.")
 	}
-	if snap.Logging.Server == "" && set.FlagNoSyslog {
+	if snap.Logging.Server == "" && checkOn(set, "no-syslog") {
 		add(Info, "Settings", "No syslog server", "Events only live in the phone's own buffer until it reboots.")
 	}
-	if snap.Upgrade.Option66 != nil && *snap.Upgrade.Option66 && set.FlagOption66 {
+	if snap.Upgrade.Option66 != nil && *snap.Upgrade.Option66 && checkOn(set, "option66") {
 		add(Info, "Provisioning", "DHCP option 66/43 may override the servers", "Any DHCP server on the phone's network can point it at another provisioning server.")
 	}
-	if fw.Supported && fw.Available != "" {
+	if fw.Supported && fw.Available != "" && checkOn(set, "firmware") {
 		add(Info, "Firmware", "Firmware "+fw.Available+" is in your library", "Running "+fw.Running+". Update from the Firmware page.")
 	}
-	if snap.CollectedAt.Before(time.Now().Add(-time.Duration(set.StaleHours) * time.Hour)) {
+	if checkOn(set, "stale") && snap.CollectedAt.Before(time.Now().Add(-time.Duration(set.StaleHours)*time.Hour)) {
 		add(Info, "Login", fmt.Sprintf("Data is more than %d hours old", set.StaleHours), "Last read "+snap.CollectedAt.Format("Jan 2 15:04"))
 	}
 	return out
 }
 
 // fleetIssues looks across phones: the same extension on two phones, for example.
-func fleetIssues(snaps map[string]*grandstream.Snapshot, names map[string]string) []Issue {
+func fleetIssues(snaps map[string]*grandstream.Snapshot, names map[string]string, set store.Settings) []Issue {
+	if !checkOn(set, "duplicate-ext") {
+		return nil
+	}
 	type use struct{ phone, server string }
 	seen := map[string][]use{}
 	for id, s := range snaps {

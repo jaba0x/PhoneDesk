@@ -263,10 +263,20 @@ func (a *App) DeleteCredential(id string) error { return a.st.DeleteCredential(i
 func (a *App) GetSettings() store.Settings { return a.st.Settings() }
 
 func (a *App) SaveSettings(s store.Settings) error {
+	off := []string{}
+	for _, id := range s.ChecksOff {
+		if core.KnownCheck(id) {
+			off = append(off, id)
+		}
+	}
+	s.ChecksOff = off
 	err := a.st.SaveSettings(s)
 	a.emit("")
 	return err
 }
+
+// Checks lists the dashboard checks, for the switches in Settings.
+func (a *App) Checks() []core.Check { return core.Checks }
 
 // ---- actions on a phone ----
 

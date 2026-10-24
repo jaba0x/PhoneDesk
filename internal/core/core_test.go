@@ -15,9 +15,10 @@ import (
 )
 
 type fakePhone struct {
-	values   map[string]string
-	rebooted int
-	lines    bool
+	values    map[string]string
+	rebooted  int
+	lines     bool
+	cookieSID bool // answer dologin like old firmware: sid only in a cookie
 }
 
 func (p *fakePhone) handler() http.Handler {
@@ -31,6 +32,11 @@ func (p *fakePhone) handler() http.Handler {
 	mux.HandleFunc("/cgi-bin/dologin", func(w http.ResponseWriter, r *http.Request) {
 		if r.FormValue("password") != "admin" {
 			fail(w, "unauthorized")
+			return
+		}
+		if p.cookieSID {
+			http.SetCookie(w, &http.Cookie{Name: "session-identity", Value: "s1"})
+			ok(w, "success")
 			return
 		}
 		ok(w, map[string]any{"sid": "s1"})
@@ -225,5 +231,55 @@ func TestFleetIssues(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("fleet issue missing: %+v", d.Issues)
+	}
+}
+
+// Old firmware sends the session id only as a cookie; the read still works.
+func TestLoginWithCookieSession(t *testing.T) {
+	p := &fakePhone{cookieSID: true, values: map[string]string{"Pphone_model": "GXP1625", "prog": "1.0.7.13", "P271": "1", "P35": "4533", "P47": "10.0.18.100"}}
+	m, _, ph := setup(t, p)
+	m.collect(ph.ID)
+	d, err := m.Detail(ph.ID)
+	if err != nil || d.Status.CollectError != "" {
+		t.Fatalf("collect: %v %q", err, d.Status.CollectError)
+	}
+	if d.Summary == nil || d.Summary.Model != "GXP1625" {
+		t.Fatalf("summary %+v", d.Summary)
+	}
+}
+
+// An active account with nothing in it (account 2 on a GXP out of the box) is
+// not a problem; one with a user ID and no server is. Every check can be
+// switched off.
+func TestAccountRulesAndSwitches(t *testing.T) {
+	p := &fakePhone{values: map[string]string{"Pphone_model": "GXP1625", "P271": "1", "P35": "4533", "P47": "10.0.18.100", "P401": "1"}}
+	m, st, ph := setup(t, p)
+	m.collect(ph.ID)
+	d, _ := m.Detail(ph.ID)
+	for _, i := range d.Issues {
+		if strings.Contains(i.Title, "no SIP server") {
+			t.Fatalf("empty active account flagged: %+v", i)
+		}
+	}
+	p.values["P404"] = "4534" // account 2 now has a user ID but still no server
+	m.collect(ph.ID)
+	d, _ = m.Detail(ph.ID)
+	found := false
+	for _, i := range d.Issues {
+		if i.Title == "Account 2 (4534) has no SIP server" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("half-configured account not flagged: %+v", d.Issues)
+	}
+	set := st.Settings()
+	set.ChecksOff = []string{"no-server", "default-password", "plain-http", "no-ntp", "no-syslog", "ssh", "telnet", "stale", "firmware"}
+	if err := st.SaveSettings(set); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = m.Detail(ph.ID)
+	if len(d.Issues) != 0 {
+		t.Fatalf("issues should all be switched off: %+v", d.Issues)
 	}
 }

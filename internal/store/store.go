@@ -56,18 +56,15 @@ type Settings struct {
 	FirmwareServer string `json:"firmwareServer"`
 	FirmwareVia    string `json:"firmwareVia"`  // "http", "https" or "tftp", for a custom server
 	FirmwarePort   int    `json:"firmwarePort"` // built-in HTTP server port
-	// Checks that can be switched off
-	FlagDefaultPassword bool `json:"flagDefaultPassword"`
-	FlagPlainHTTP       bool `json:"flagPlainHttp"`
-	FlagNoNTP           bool `json:"flagNoNtp"`
-	FlagNoSyslog        bool `json:"flagNoSyslog"`
-	FlagOption66        bool `json:"flagOption66"`
+	// ChecksOff lists the dashboard checks switched off, by id (see core.Checks).
+	// Absent from the file means the defaults; an empty list means every check is on.
+	ChecksOff []string `json:"checksOff"`
 }
 
 func DefaultSettings() Settings {
 	return Settings{PingInterval: 30, CollectInterval: 15, Parallel: 4, KeepBackups: 20, StaleHours: 6,
 		FirmwareSource: "builtin", FirmwareVia: "http", FirmwarePort: 6970,
-		FlagDefaultPassword: true, FlagPlainHTTP: true, FlagNoNTP: true, FlagNoSyslog: true, FlagOption66: false}
+		ChecksOff: []string{"option66"}}
 }
 
 type data struct {

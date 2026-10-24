@@ -316,3 +316,7 @@ dl.kv dd .unset { color: var(--faint); font-family: var(--sans); font-size: 13px
 .credit:hover img { opacity: 1; }
 .about .body { display: flex; align-items: center; gap: 22px; }
 .about-logo img { width: 190px; height: auto; display: block; }
+
+/* settings: check switches */
+.checkgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 0 24px; }
+.checkgrp .check { font-size: 13.5px; }

@@ -878,7 +878,14 @@ async function renderSettings() {
   const ver = await call("Version");
   const df = await call("DataFolder");
   const fws = await call("FirmwareServer").catch(() => ({}));
-  const chk = (id, key, label) => `<label class="check" style="margin-bottom:6px"><input type="checkbox" id="${id}" ${set[key] ? "checked" : ""}> ${label}</label>`;
+  const checks = await call("Checks").catch(() => []);
+  const off = new Set(set.checksOff || []);
+  const sevWord = { critical: "Critical", warning: "Warning", info: "Note" };
+  const checkRows = () => {
+    const groups = [...new Set(checks.map((c) => c.group))];
+    return groups.map((g) => `<div class="checkgrp"><div class="faint" style="font-size:12px;margin:8px 0 4px">${esc(g)}</div>${checks.filter((c) => c.group === g).map((c) =>
+      `<label class="check" style="margin-bottom:5px" title="${esc(c.detail)}"><input type="checkbox" data-check="${c.id}" ${off.has(c.id) ? "" : "checked"}> <span class="sev ${c.severity}" style="min-width:64px;text-align:center">${sevWord[c.severity]}</span> ${esc(c.label)}</label>`).join("")}</div>`).join("");
+  };
   $("#main").innerHTML = `<div class="page" style="max-width:900px"><div class="head"><h1>Settings</h1></div>
     <section class="panel" style="margin-bottom:18px"><h2>Credentials<span class="grow"></span><button class="btn small" onclick="editCred()">${ICON.plus}Add</button></h2>
       ${S.creds.length ? `<table><tbody>${S.creds.map((c) => `<tr><td>${esc(c.name)}</td><td class="mono">${esc(c.username)}</td><td style="text-align:right"><button class="btn small" onclick="editCred('${c.id}')">Edit</button> <button class="btn small danger" onclick="delCred('${c.id}')">Remove</button></td></tr>`).join("")}</tbody></table>` : `<div class="empty">No credentials yet. They're added when you add your first phone.</div>`}
@@ -890,12 +897,8 @@ async function renderSettings() {
         <label class="f"><span>Settings copies kept per phone</span><input type="number" id="kb" min="1" value="${set.keepBackups}"></label>
         <label class="f"><span>Note when data is older than (hours)</span><input type="number" id="sh" min="1" value="${set.staleHours}"></label></div>
       <div style="margin-bottom:14px"><b style="font-weight:600">Checks</b>
-        <p class="faint" style="font-size:12.5px;margin:4px 0 8px">Switch off the ones that don't apply to your network.</p>
-        ${chk("f1", "flagDefaultPassword", "Flag phones that still accept admin/admin")}
-        ${chk("f2", "flagPlainHttp", "Flag web access over plain HTTP")}
-        ${chk("f3", "flagNoNtp", "Flag phones without an NTP server")}
-        ${chk("f4", "flagNoSyslog", "Note phones without a syslog server")}
-        ${chk("f5", "flagOption66", "Note phones that let DHCP option 66/43 override their servers")}</div>
+        <p class="faint" style="font-size:12.5px;margin:4px 0 2px">Every rule the dashboard applies. Switch off the ones that don't apply to your network; hover one for what it looks at.</p>
+        <div class="checkgrid">${checkRows()}</div></div>
       <div style="border-top:1px solid var(--line-soft);padding-top:14px;margin-bottom:16px"><b style="font-weight:600">Where phones fetch firmware from</b>
         <p class="faint" style="font-size:12.5px;margin:4px 0 10px">During an update the phone is pointed here, rebooted, and the setting is put back afterwards.</p>
         <label class="check" style="margin-bottom:6px"><input type="radio" name="fs" value="builtin" ${set.firmwareSource === "builtin" ? "checked" : ""}> This computer: PhoneDesk serves the library over HTTP <span class="faint">(the phone must reach this computer)</span></label>
@@ -931,7 +934,7 @@ async function renderSettings() {
 async function saveSettings() {
   try {
     await call("SaveSettings", { ...S.settings, pingInterval: +$("#pi").value, collectInterval: +$("#ci").value, parallel: +$("#pa").value, keepBackups: +$("#kb").value, staleHours: +$("#sh").value,
-      flagDefaultPassword: $("#f1").checked, flagPlainHttp: $("#f2").checked, flagNoNtp: $("#f3").checked, flagNoSyslog: $("#f4").checked, flagOption66: $("#f5").checked,
+      checksOff: $$("input[data-check]").filter((x) => !x.checked).map((x) => x.dataset.check),
       firmwareSource: $("input[name=fs]:checked").value, firmwarePort: +$("#fp").value, firmwareServer: $("#fsrv").value.trim(), firmwareVia: $("#fvia").value });
     S.settings = await call("GetSettings");
     toast("Settings saved");

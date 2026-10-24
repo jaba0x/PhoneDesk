@@ -41,12 +41,12 @@ Online and offline counts, how many SIP accounts are registered, and a problem l
 | Area | Checks |
 |---|---|
 | Reachability | Phone offline, web login failing, reading the phone failing |
-| Accounts | Account not registered, an active account with no SIP server, a phone with no active account at all, the same extension registered from two phones |
+| Accounts | Account not registered, an account with a user ID but no SIP server, a phone with no usable account at all, the same extension registered from two phones |
 | Security | Factory admin password still accepted, web access over plain HTTP, Telnet open, SSH open |
 | Settings | No NTP server, no syslog server, DHCP option 66 allowed to override the provisioning server |
 | Firmware | A newer image for the phone's family sitting in your library |
 
-The password, plain HTTP, NTP, syslog and option 66 checks can each be switched off in Settings.
+Every check can be switched off in Settings. An active account with nothing in it, the factory state of account 2 on many GXP phones, is never flagged.
 
 ### Every phone, in detail
 

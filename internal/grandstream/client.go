@@ -1,6 +1,7 @@
 package grandstream
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -29,11 +30,25 @@ type Client struct {
 	Password string
 	Timeout  time.Duration
 
-	mu     sync.Mutex
-	sid    string
-	scheme string // the one that worked
-	http   *http.Client
-	raw    map[string]string // request -> response, for the Raw tab
+	mu        sync.Mutex
+	sid       string
+	scheme    string // the one that worked
+	http      *http.Client
+	raw       map[string]string // request -> response, for the Raw tab
+	cookieSID string            // session-identity cookie from the last answer, if any
+}
+
+// legacyCipherSuites is Go's default list plus the ones it dropped (3DES, RC4,
+// SHA-1 CBC), which some phones still need.
+func legacyCipherSuites() []uint16 {
+	var out []uint16
+	for _, cs := range tls.CipherSuites() {
+		out = append(out, cs.ID)
+	}
+	for _, cs := range tls.InsecureCipherSuites() {
+		out = append(out, cs.ID)
+	}
+	return out
 }
 
 var (
@@ -58,7 +73,10 @@ func (c *Client) client() *http.Client {
 		c.http = &http.Client{
 			Timeout: t,
 			Transport: &http.Transport{
-				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // self-signed phone certificates
+				// Self-signed certificates, and on older firmware TLS 1.0/1.1 with
+				// ciphers Go no longer offers by default. The phone is on your own
+				// network and the alternative is plain HTTP, so accept them.
+				TLSClientConfig:     &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10, CipherSuites: legacyCipherSuites()}, //nolint:gosec // see above
 				DialContext:         (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 				MaxIdleConnsPerHost: 2,
 				DisableKeepAlives:   true,
@@ -155,14 +173,21 @@ func (c *Client) do(ctx context.Context, method, scheme, path string, form url.V
 		return response{}, "", err
 	}
 	defer resp.Body.Close()
+	for _, ck := range resp.Cookies() {
+		if ck.Name == "session-identity" && ck.Value != "" {
+			c.mu.Lock()
+			c.cookieSID = ck.Value
+			c.mu.Unlock()
+		}
+	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return response{}, "", err
 	}
 	text := string(b)
 	var r response
-	if jerr := json.Unmarshal(b, &r); jerr != nil {
-		return response{}, text, fmt.Errorf("unexpected answer from %s (HTTP %d)", path, resp.StatusCode)
+	if jerr := json.Unmarshal(bytes.TrimPrefix(bytes.TrimSpace(b), []byte("\xef\xbb\xbf")), &r); jerr != nil {
+		return response{}, text, fmt.Errorf("unexpected answer from %s (HTTP %d, %s)", path, resp.StatusCode, describeBody(text))
 	}
 	return r, text, nil
 }
@@ -179,12 +204,18 @@ func (c *Client) Login(ctx context.Context) error {
 	var last error
 	for _, scheme := range c.schemes() {
 		form := url.Values{"username": {user}, "password": {c.Password}}
+		c.mu.Lock()
+		c.cookieSID = ""
+		c.mu.Unlock()
 		r, text, err := c.do(ctx, "POST", scheme, "/cgi-bin/dologin", form, false)
 		if err != nil {
 			var ne net.Error
 			if errors.As(err, &ne) || isConnErr(err) {
 				last = ErrUnreachable
 				continue
+			}
+			if text != "" {
+				c.record("dologin ("+scheme+") answer", text)
 			}
 			last = err
 			continue
@@ -200,9 +231,21 @@ func (c *Client) Login(ctx context.Context) error {
 			SID  string `json:"sid"`
 			Role string `json:"role"`
 		}
-		if json.Unmarshal(r.Body, &bd) != nil || bd.SID == "" {
-			// some firmware puts the sid in a cookie instead
-			return errors.New("the phone logged in but sent no session id; its firmware may be too old for the API")
+		json.Unmarshal(r.Body, &bd) //nolint:errcheck // the body may also be a bare string
+		if bd.SID == "" {
+			// some firmware answers with the sid as a plain string, or only sets the cookie
+			var plain string
+			if json.Unmarshal(r.Body, &plain) == nil && plain != "" && plain != "success" {
+				bd.SID = plain
+			}
+		}
+		if bd.SID == "" {
+			c.mu.Lock()
+			bd.SID = c.cookieSID
+			c.mu.Unlock()
+		}
+		if bd.SID == "" {
+			return errors.New("the phone logged in but sent no session id (see dologin under Raw output); its firmware may be too old for the API")
 		}
 		c.mu.Lock()
 		c.sid, c.scheme = bd.SID, scheme
@@ -468,4 +511,22 @@ func Fingerprint(ctx context.Context, host string, timeout time.Duration) (strin
 		}
 	}
 	return "", ErrNotGS
+}
+
+// describeBody says in a few words what a non-JSON answer looked like.
+func describeBody(text string) string {
+	t := strings.TrimSpace(text)
+	switch {
+	case t == "":
+		return "empty body"
+	case strings.HasPrefix(strings.ToLower(t), "<!doctype") || strings.HasPrefix(t, "<html") || strings.Contains(t, "<body"):
+		if strings.Contains(strings.ToLower(t), "login") {
+			return "an HTML login page instead of JSON; this firmware may not have the API"
+		}
+		return "an HTML page instead of JSON"
+	}
+	if len(t) > 60 {
+		t = t[:60] + "…"
+	}
+	return "body " + strconv.Quote(t)
 }

@@ -164,7 +164,7 @@ func (m *Manager) Dashboard() Dashboard {
 		d.Issues = append(d.Issues, v.Issues...)
 		d.Phones = append(d.Phones, v)
 	}
-	d.Issues = append(d.Issues, fleetIssues(snaps, names)...)
+	d.Issues = append(d.Issues, fleetIssues(snaps, names, set)...)
 	sortIssues(d.Issues)
 	for _, i := range d.Issues {
 		switch i.Severity {
