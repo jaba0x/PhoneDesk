@@ -181,7 +181,7 @@ func (c *Client) do(ctx context.Context, method, scheme, path string, form url.V
 	}
 	resp, err := c.client().Do(req)
 	if err != nil {
-		return response{}, "", err
+		return response{}, "", stripQuery(err)
 	}
 	defer resp.Body.Close()
 	for _, ck := range resp.Cookies() {
@@ -201,6 +201,37 @@ func (c *Client) do(ctx context.Context, method, scheme, path string, form url.V
 		return response{}, text, fmt.Errorf("unexpected answer from %s (HTTP %d, %s)", path, resp.StatusCode, describeBody(text))
 	}
 	return r, text, nil
+}
+
+// stripQuery removes the query string from the URL inside a transport error,
+// so a passcode or session id never ends up in a message shown to the user.
+func stripQuery(err error) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		if u, perr := url.Parse(ue.URL); perr == nil && (u.RawQuery != "" || u.Fragment != "") {
+			u.RawQuery, u.Fragment = "", ""
+			ue.URL = u.String()
+		}
+	}
+	return err
+}
+
+// NoAnswer reports whether err means the phone took the request but never
+// answered it: a timeout, or the connection dropped. Some firmware reboots
+// the moment it reads a REBOOT request, before writing a reply.
+func NoAnswer(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return true
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection reset") || strings.Contains(s, "broken pipe") || strings.Contains(s, "EOF")
 }
 
 // Login opens a session. With Scheme "auto" it tries https, then http.

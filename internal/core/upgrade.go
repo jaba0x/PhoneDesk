@@ -303,17 +303,29 @@ func (m *Manager) runJob(j *Job) {
 	}
 	m.jobLog(j, "", 0.25, "Firmware server set to %s (%s), always check for new firmware", path, grandstream.Display(grandstream.PFirmwareVia, via))
 	m.jobLog(j, "Rebooting", 0.3, "Rebooting; the phone fetches %s on the way up", grandstream.FirmwareFile(j.Family))
+	rebootUnsure := false
 	if err := c.Reboot(ctx); err != nil {
+		if !grandstream.NoAnswer(err) {
+			c.Logout(context.Background())
+			m.finishJob(j, fmt.Errorf("reboot refused: %w (turn on Action URI support under Settings → Remote control on the phone, or reboot it by hand)", err))
+			return
+		}
+		// GXP16xx 1.0.2.x reboots as soon as it reads the request and never
+		// answers it; whether it went down tells us if the reboot took
+		rebootUnsure = true
+		m.jobLog(j, "", 0.32, "No answer to the reboot request (%v); some firmware reboots before replying, so watching whether the phone goes down", err)
+	} else {
 		c.Logout(context.Background())
-		m.finishJob(j, fmt.Errorf("reboot refused: %w (turn on Action URI support under Settings → Remote control on the phone, or reboot it by hand)", err))
-		return
 	}
-	c.Logout(context.Background())
 
 	// down, then up again
 	port := webPorts(p, c.UsedScheme())[0]
 	m.jobLog(j, "Waiting for the phone to go down", 0.35, "")
 	if !waitPort(ctx, p.Host, port, false, 90*time.Second) {
+		if rebootUnsure {
+			m.finishJob(j, errors.New("the phone didn't answer the reboot request and is still up after 90 s (turn on Action URI support under Settings → Remote control on the phone, or reboot it by hand)"))
+			return
+		}
 		m.jobLog(j, "", 0.4, "The phone is still answering after 90 s; it may be rebooting slowly or ignoring the request")
 	}
 	if token != "" {

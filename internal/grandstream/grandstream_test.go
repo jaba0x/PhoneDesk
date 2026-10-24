@@ -306,3 +306,20 @@ func TestFixHeaderBlock(t *testing.T) {
 		t.Fatal("found an end that isn't there")
 	}
 }
+
+func TestStripQueryAndNoAnswer(t *testing.T) {
+	err := &url.Error{Op: "Get", URL: "http://10.0.0.5/cgi-bin/api-sys_operation?passcode=secret&request=REBOOT&sid=abc", Err: context.DeadlineExceeded}
+	got := stripQuery(err).Error()
+	if strings.Contains(got, "secret") || strings.Contains(got, "sid=") {
+		t.Fatalf("query not stripped: %s", got)
+	}
+	if !strings.Contains(got, "/cgi-bin/api-sys_operation") {
+		t.Fatalf("path lost: %s", got)
+	}
+	if !NoAnswer(err) {
+		t.Fatal("a timeout should count as no answer")
+	}
+	if NoAnswer(apiError{Body: "unauthorized"}) {
+		t.Fatal("a refusal isn't 'no answer'")
+	}
+}

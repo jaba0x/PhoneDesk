@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- An update no longer fails when the phone doesn't answer the reboot request. GXP16xx 1.0.2.x reboots the moment it reads the request, before replying, so the job now waits to see whether the phone goes down and only gives up (with the Action URI hint) if it's still up after 90 seconds.
+- A request that fails on the way to the phone is reported without its query string, so the admin password sent as `passcode` to the remote-control endpoints never appears in a job error or a toast. It did in 0.1.5 and older.
+
 ## 0.1.5
 
 - Writing settings to GXP16xx phones on 1.0.2.x firmware failed with `malformed MIME header: missing colon: "#!/bin/ash"`, which stopped every firmware update and template on them at the first step. That firmware answers `api.values.post` with a line of its own script ahead of the HTTP headers; browsers skip it, Go's HTTP client refused the whole answer. PhoneDesk now reads past it.
