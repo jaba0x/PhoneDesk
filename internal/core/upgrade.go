@@ -1,0 +1,483 @@
+package core
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/jaba0x/phonedesk/internal/firmware"
+	"github.com/jaba0x/phonedesk/internal/grandstream"
+	"github.com/jaba0x/phonedesk/internal/store"
+)
+
+// Job is one firmware update of one phone. Phones are updated one after
+// another so a bad image doesn't take a whole office down at once.
+type Job struct {
+	ID        string    `json:"id"`
+	PhoneID   string    `json:"phoneId"`
+	PhoneName string    `json:"phoneName"`
+	From      string    `json:"from"`
+	To        string    `json:"to"`
+	Image     string    `json:"image"`
+	Family    string    `json:"family"`
+	Source    string    `json:"source"` // where the phone fetched from
+	State     string    `json:"state"`  // queued, running, done, failed, cancelled
+	Step      string    `json:"step"`
+	Progress  float64   `json:"progress"`
+	Log       []string  `json:"log"`
+	Error     string    `json:"error"`
+	StartedAt time.Time `json:"startedAt"`
+	EndedAt   time.Time `json:"endedAt"`
+}
+
+type upgrader struct {
+	mu      sync.Mutex
+	jobs    []*Job
+	queue   chan *Job
+	fetches map[string]chan struct{} // server token -> closed when the phone fetched the image
+}
+
+func (u *upgrader) jobFor(phoneID string) *Job {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var latest *Job
+	for _, j := range u.jobs {
+		if j.PhoneID == phoneID {
+			latest = j
+		}
+	}
+	if latest == nil {
+		return nil
+	}
+	cp := *latest
+	return &cp
+}
+
+// fetchedToken is called by the HTTP server when a phone downloads an image.
+func (u *upgrader) fetched(token, remote string, size int64) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if ch, ok := u.fetches[token]; ok {
+		select {
+		case <-ch:
+		default:
+			close(ch)
+		}
+	}
+	for _, j := range u.jobs {
+		if j.State == "running" && strings.HasSuffix(j.Source, "/"+token) {
+			j.Log = append(j.Log, fmt.Sprintf("%s  %s downloaded the image (%d MB)", time.Now().Format("15:04:05"), remote, size>>20))
+		}
+	}
+}
+
+// Jobs lists jobs, newest first.
+func (m *Manager) Jobs() []Job {
+	m.up.mu.Lock()
+	defer m.up.mu.Unlock()
+	out := make([]Job, 0, len(m.up.jobs))
+	for i := len(m.up.jobs) - 1; i >= 0; i-- {
+		out = append(out, *m.up.jobs[i])
+	}
+	return out
+}
+
+func (m *Manager) CancelJob(id string) error {
+	m.up.mu.Lock()
+	defer m.up.mu.Unlock()
+	for _, j := range m.up.jobs {
+		if j.ID == id {
+			if j.State != "queued" {
+				return errors.New("only queued updates can be cancelled")
+			}
+			j.State, j.Step, j.EndedAt = "cancelled", "Cancelled", time.Now()
+			m.changed()
+			return nil
+		}
+	}
+	return errors.New("job not found")
+}
+
+func (m *Manager) ClearFinishedJobs() {
+	m.up.mu.Lock()
+	keep := m.up.jobs[:0]
+	for _, j := range m.up.jobs {
+		if j.State == "queued" || j.State == "running" {
+			keep = append(keep, j)
+		}
+	}
+	m.up.jobs = keep
+	m.up.mu.Unlock()
+	m.changed()
+}
+
+// StartUpgrade queues updates. image "" picks the newest image for each
+// phone's family.
+func (m *Manager) StartUpgrade(ids []string, image string) ([]Job, error) {
+	if m.lib == nil {
+		return nil, errors.New("the firmware library couldn't be opened")
+	}
+	var out []Job
+	var errs []string
+	for _, id := range ids {
+		p, ok := m.st.Phone(id)
+		if !ok {
+			continue
+		}
+		m.mu.Lock()
+		snap := m.snaps[id]
+		m.mu.Unlock()
+		name := displayName(p, snap)
+		if p.Disabled {
+			errs = append(errs, name+" is disabled")
+			continue
+		}
+		fs := m.firmwareState(p, snap)
+		if !fs.Supported {
+			errs = append(errs, name+" hasn't been read yet")
+			continue
+		}
+		var img firmware.Image
+		if image != "" {
+			img, ok = m.lib.Get(image)
+			if !ok {
+				errs = append(errs, image+" isn't in the library")
+				continue
+			}
+			if img.Family != fs.Family {
+				errs = append(errs, fmt.Sprintf("%s is for %s phones, %s is %s", image, img.Family, name, fs.Family))
+				continue
+			}
+		} else {
+			img, ok = m.lib.Latest(fs.Family)
+			if !ok {
+				errs = append(errs, "no image for "+fs.Family+" in the library ("+name+")")
+				continue
+			}
+		}
+		if j := m.up.jobFor(id); j != nil && (j.State == "queued" || j.State == "running") {
+			errs = append(errs, name+" already has an update in progress")
+			continue
+		}
+		job := &Job{ID: store.NewID(), PhoneID: id, PhoneName: name, From: fs.Running, To: img.Version.Text, Image: img.File, Family: img.Family, State: "queued", Step: "Waiting for its turn"}
+		m.up.mu.Lock()
+		m.up.jobs = append(m.up.jobs, job)
+		m.up.mu.Unlock()
+		select {
+		case m.up.queue <- job:
+			out = append(out, *job)
+		default:
+			errs = append(errs, "too many updates queued")
+		}
+	}
+	m.changed()
+	if len(out) == 0 && len(errs) > 0 {
+		return nil, errors.New(strings.Join(errs, "; "))
+	}
+	if len(errs) > 0 {
+		return out, errors.New(strings.Join(errs, "; "))
+	}
+	return out, nil
+}
+
+func (m *Manager) jobWorker() {
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case j := <-m.up.queue:
+			m.up.mu.Lock()
+			skip := j.State != "queued"
+			if !skip {
+				j.State, j.StartedAt = "running", time.Now()
+			}
+			m.up.mu.Unlock()
+			if skip {
+				continue
+			}
+			m.runJob(j)
+		}
+	}
+}
+
+func (m *Manager) jobLog(j *Job, step string, progress float64, f string, a ...any) {
+	m.up.mu.Lock()
+	if step != "" {
+		j.Step = step
+	}
+	if progress >= 0 {
+		j.Progress = progress
+	}
+	if f != "" {
+		j.Log = append(j.Log, time.Now().Format("15:04:05")+"  "+fmt.Sprintf(f, a...))
+	}
+	m.up.mu.Unlock()
+	m.changed()
+}
+
+func (m *Manager) finishJob(j *Job, err error) {
+	m.up.mu.Lock()
+	j.EndedAt = time.Now()
+	if err != nil {
+		j.State, j.Error, j.Step = "failed", err.Error(), "Failed"
+		j.Log = append(j.Log, time.Now().Format("15:04:05")+"  Failed: "+err.Error())
+	} else {
+		j.State, j.Step, j.Progress = "done", "Done", 1
+	}
+	m.up.mu.Unlock()
+	m.changed()
+}
+
+// runJob does one update: point the phone at the image, reboot it, wait for
+// it to come back and check the version it runs.
+func (m *Manager) runJob(j *Job) {
+	p, ok := m.st.Phone(j.PhoneID)
+	if !ok {
+		m.finishJob(j, errors.New("phone was deleted"))
+		return
+	}
+	l := m.lock(p.ID)
+	l.Lock()
+	defer l.Unlock()
+	ctx, cancel := context.WithTimeout(m.ctx, 20*time.Minute)
+	defer cancel()
+	set := m.st.Settings()
+
+	// where the phone fetches from
+	path, via, token, err := m.firmwareSource(set, p, j.Image)
+	if err != nil {
+		m.finishJob(j, err)
+		return
+	}
+	if token != "" {
+		defer m.srv.Withdraw(token)
+		m.up.mu.Lock()
+		if m.up.fetches == nil {
+			m.up.fetches = map[string]chan struct{}{}
+		}
+		m.up.fetches[token] = make(chan struct{})
+		fetchedCh := m.up.fetches[token]
+		m.up.mu.Unlock()
+		defer func() {
+			m.up.mu.Lock()
+			delete(m.up.fetches, token)
+			m.up.mu.Unlock()
+		}()
+		_ = fetchedCh
+	}
+	m.up.mu.Lock()
+	j.Source = path
+	m.up.mu.Unlock()
+
+	m.jobLog(j, "Logging in", 0.05, "Updating %s from %s to %s (%s)", j.PhoneName, j.From, j.To, j.Image)
+	c, _, err := m.client(p)
+	if err != nil {
+		m.finishJob(j, err)
+		return
+	}
+	if err := m.login(ctx, p, c); err != nil {
+		m.finishJob(j, err)
+		return
+	}
+	keys := []string{grandstream.PFirmwarePath, grandstream.PFirmwareVia, grandstream.PAlwaysCheck, grandstream.PFirmwarePre, grandstream.PFirmwareSuf}
+	before, err := c.Values(ctx, keys)
+	if err != nil {
+		c.Logout(context.Background())
+		m.finishJob(j, fmt.Errorf("reading upgrade settings: %w", err))
+		return
+	}
+	m.jobLog(j, "Pointing the phone at the image", 0.15, "Upgrade settings before: server %q via %s, check %q", before[grandstream.PFirmwarePath], grandstream.Display(grandstream.PFirmwareVia, before[grandstream.PFirmwareVia]), grandstream.Display(grandstream.PAlwaysCheck, before[grandstream.PAlwaysCheck]))
+	want := map[string]string{grandstream.PFirmwarePath: path, grandstream.PFirmwareVia: via, grandstream.PAlwaysCheck: "0", grandstream.PFirmwarePre: "", grandstream.PFirmwareSuf: ""}
+	if err := c.SetValues(ctx, want); err != nil {
+		c.Logout(context.Background())
+		m.finishJob(j, fmt.Errorf("setting the firmware server: %w", err))
+		return
+	}
+	m.jobLog(j, "", 0.25, "Firmware server set to %s (%s), always check for new firmware", path, grandstream.Display(grandstream.PFirmwareVia, via))
+	m.jobLog(j, "Rebooting", 0.3, "Rebooting; the phone fetches %s on the way up", grandstream.FirmwareFile(j.Family))
+	if err := c.Reboot(ctx); err != nil {
+		c.Logout(context.Background())
+		m.finishJob(j, fmt.Errorf("reboot refused: %w (turn on Action URI support under Settings → Remote control on the phone, or reboot it by hand)", err))
+		return
+	}
+	c.Logout(context.Background())
+
+	// down, then up again
+	port := webPorts(p, c.UsedScheme())[0]
+	m.jobLog(j, "Waiting for the phone to go down", 0.35, "")
+	if !waitPort(ctx, p.Host, port, false, 90*time.Second) {
+		m.jobLog(j, "", 0.4, "The phone is still answering after 90 s; it may be rebooting slowly or ignoring the request")
+	}
+	if token != "" {
+		m.jobLog(j, "Waiting for the phone to download the image", 0.45, "")
+		m.up.mu.Lock()
+		ch := m.up.fetches[token]
+		m.up.mu.Unlock()
+		select {
+		case <-ch:
+			m.jobLog(j, "Installing", 0.65, "Image downloaded; the phone is writing it")
+		case <-time.After(4 * time.Minute):
+			m.jobLog(j, "", 0.5, "No download from the phone after 4 min. It may not reach this computer on port %d (firewall, VPN), or it decided the image isn't newer", m.srv.Port())
+		case <-ctx.Done():
+			m.finishJob(j, ctx.Err())
+			return
+		}
+	} else {
+		m.jobLog(j, "Installing", 0.55, "Waiting for the phone to come back")
+	}
+	m.jobLog(j, "Waiting for the phone to come back", 0.75, "")
+	if !waitPort(ctx, p.Host, port, true, 10*time.Minute) {
+		m.finishJob(j, errors.New("the phone didn't come back within 10 minutes"))
+		return
+	}
+	time.Sleep(10 * time.Second) // let the web server settle after boot
+	m.jobLog(j, "Checking the version", 0.85, "The phone is back")
+	c2, _, err := m.client(p)
+	if err != nil {
+		m.finishJob(j, err)
+		return
+	}
+	var running string
+	for attempt := 0; attempt < 6; attempt++ {
+		if err = m.login(ctx, p, c2); err == nil {
+			v, verr := c2.Values(ctx, []string{"prog", "prog_version"})
+			if verr == nil {
+				running = v["prog"]
+				if running == "" {
+					running = v["prog_version"]
+				}
+				break
+			}
+			err = verr
+			c2.Logout(context.Background())
+		}
+		time.Sleep(10 * time.Second)
+	}
+	if err != nil {
+		m.finishJob(j, fmt.Errorf("the phone is back but can't be read: %w", err))
+		return
+	}
+	defer c2.Logout(context.Background())
+	// put the upgrade settings back the way they were
+	restore := map[string]string{}
+	for _, k := range keys {
+		if v, ok := before[k]; ok && v != want[k] {
+			restore[k] = v
+		}
+	}
+	if len(restore) > 0 {
+		if err := c2.SetValues(ctx, restore); err != nil {
+			m.jobLog(j, "", 0.9, "Couldn't restore the previous upgrade settings: %s", err.Error())
+		} else {
+			m.jobLog(j, "", 0.9, "Upgrade settings restored (server %q)", before[grandstream.PFirmwarePath])
+		}
+	}
+	m.Enqueue(p.ID)
+	cur, _ := parseVer(running)
+	target, _ := parseVer(j.To)
+	switch {
+	case running == "":
+		m.finishJob(j, errors.New("the phone didn't report its version"))
+	case cur.Compare(target) == 0:
+		m.jobLog(j, "", 0.95, "Running %s", running)
+		m.finishJob(j, nil)
+	case cur.Newer(target):
+		m.jobLog(j, "", 0.95, "Running %s, which is newer than the image", running)
+		m.finishJob(j, nil)
+	default:
+		m.finishJob(j, fmt.Errorf("the phone came back on %s, not %s; it didn't install the image", running, j.To))
+	}
+}
+
+// firmwareSource works out the server path and transport for a job.
+func (m *Manager) firmwareSource(set store.Settings, p store.Phone, image string) (path, via, token string, err error) {
+	switch set.FirmwareSource {
+	case "grandstream":
+		return "firmware.grandstream.com", "1", "", nil
+	case "custom":
+		if set.FirmwareServer == "" {
+			return "", "", "", errors.New("no custom firmware server set")
+		}
+		via = "1"
+		if set.FirmwareVia == "https" {
+			via = "2"
+		} else if set.FirmwareVia == "tftp" {
+			via = "0"
+		}
+		return set.FirmwareServer, via, "", nil
+	}
+	if m.srv == nil {
+		return "", "", "", errors.New("the firmware server isn't available")
+	}
+	if err := m.srv.Start(set.FirmwarePort); err != nil {
+		return "", "", "", fmt.Errorf("can't start the firmware server: %w", err)
+	}
+	ip, err := firmware.LocalIP(p.Host)
+	if err != nil {
+		return "", "", "", err
+	}
+	token = m.srv.Offer(image)
+	return fmt.Sprintf("%s:%d/%s", ip, set.FirmwarePort, token), "1", token, nil
+}
+
+// waitPort waits until the TCP port is (or isn't) answering.
+func waitPort(ctx context.Context, host, port string, up bool, max time.Duration) bool {
+	deadline := time.Now().Add(max)
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return false
+		}
+		c, err := net.DialTimeout("tcp", net.JoinHostPort(host, port), 2*time.Second)
+		if err == nil {
+			c.Close()
+		}
+		if (err == nil) == up {
+			return true
+		}
+		time.Sleep(3 * time.Second)
+	}
+	return false
+}
+
+func parseVer(s string) (firmware.Version, bool) { return firmware.ParseVersion(s) }
+
+// FirmwareServerInfo tells the UI about the built-in server.
+type FirmwareServerInfo struct {
+	Running bool   `json:"running"`
+	Port    int    `json:"port"`
+	Example string `json:"example"`
+}
+
+func (m *Manager) FirmwareServerInfo() FirmwareServerInfo {
+	if m.srv == nil {
+		return FirmwareServerInfo{}
+	}
+	info := FirmwareServerInfo{Running: m.srv.Running(), Port: m.srv.Port()}
+	if !info.Running {
+		info.Port = m.st.Settings().FirmwarePort
+	}
+	if ip, err := firmware.LocalIP("8.8.8.8"); err == nil {
+		info.Example = ip + ":" + strconv.Itoa(info.Port)
+	}
+	return info
+}
+
+// StartFirmwareServer turns the built-in server on outside of a job, for
+// phones pointed at it by hand.
+func (m *Manager) StartFirmwareServer() error {
+	if m.srv == nil {
+		return errors.New("the firmware library couldn't be opened")
+	}
+	return m.srv.Start(m.st.Settings().FirmwarePort)
+}
+
+func (m *Manager) StopFirmwareServer() {
+	if m.srv != nil {
+		m.srv.Stop()
+	}
+}

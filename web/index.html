@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhoneDesk: desktop app for Grandstream IP phones, for Mac and Windows</title>
+<meta name="description" content="Free desktop app for Grandstream GRP, GXP and other IP phones. Dashboard, SIP registration checks, templates for bulk settings, provisioning files, firmware updates and settings history. Talks to each phone's own web interface, nothing leaves your computer.">
+<meta property="og:title" content="PhoneDesk: every Grandstream phone on one desk">
+<meta property="og:description" content="Free desktop app for Grandstream IP phones. Phone web API only, macOS and Windows.">
+<meta property="og:image" content="https://jaba0x.github.io/PhoneDesk/img/dashboard.webp">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#050608">
+<link rel="icon" href="img/favicon.png">
+<link rel="apple-touch-icon" href="img/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="#top"><img src="img/logo.svg" alt="" width="30" height="30"><span>PhoneDesk</span></a>
+    <nav class="links">
+      <a href="#features">Features</a>
+      <a href="#phones">Phones</a>
+      <a href="#download">Download</a>
+      <a href="#faq">FAQ</a>
+      <a href="docs/">Docs</a>
+    </nav>
+    <div class="nav-right">
+      <a class="gh" href="https://github.com/jaba0x/PhoneDesk" aria-label="PhoneDesk on GitHub">
+        <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        <span class="stars" data-stars>GitHub</span>
+      </a>
+      <a class="x" href="https://x.com/jaba0x" aria-label="Jaba on X">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M18.9 1.2h3.7l-8 9.1 9.4 12.5h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9 6.1-6.9zm-1.3 19.4h2L6.5 3.3H4.3l13.3 17.3z"/></svg>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ================= hero ================= -->
+<section class="hero">
+  <canvas class="ports" aria-hidden="true"></canvas>
+  <div class="hero-in">
+    <h1>
+      <span class="dim">Every</span> Grandstream phone.<br>
+      <span class="dim">On</span> one desk<span class="dim">.</span>
+    </h1>
+    <p class="hero-sub"><span class="dim">…because sixty</span> web pages <span class="dim">aren't a</span> dashboard.</p>
+    <p class="lead">PhoneDesk logs in to your GRP and GXP phones through their own web interface and shows what's offline, what isn't registered and what's set wrong. Templates for bulk settings, provisioning files, firmware updates and a history of every phone's settings included.</p>
+    <div class="cta">
+      <a class="btn btn-light" data-dl="mac" href="https://github.com/jaba0x/PhoneDesk/releases/latest">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2.1-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.2.7-3 1.6-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.5z"/></svg>
+        Download for Mac
+      </a>
+      <a class="btn btn-glass" data-dl="win" href="https://github.com/jaba0x/PhoneDesk/releases/latest">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M0 3.4 9.8 2v9.5H0V3.4zm11-1.6L24 0v11.4H11V1.8zM0 12.6h9.8V22L0 20.6v-8zm11 0h13V24l-13-1.8v-9.6z"/></svg>
+        Download for Windows
+      </a>
+      <a class="btn btn-line" href="docs/">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 4.5A1.5 1.5 0 0 1 5.5 3H19v15H5.5A1.5 1.5 0 0 0 4 19.5v-15zM4 19.5A1.5 1.5 0 0 0 5.5 21H19v-3"/></svg>
+        Read the docs
+      </a>
+    </div>
+    <p class="fine">Free · Source on GitHub · Phone web API only · Nothing leaves your computer · Not affiliated with Grandstream</p>
+  </div>
+
+  <figure class="stage">
+    <div class="window">
+      <div class="titlebar"><i></i><i></i><i></i><span>PhoneDesk</span></div>
+      <img src="img/dashboard.webp" width="1440" height="880" alt="PhoneDesk dashboard: 4 online, 1 offline, 5 of 8 accounts registered, a problem list sorted by severity, and every phone drawn with one LED per account">
+    </div>
+  </figure>
+</section>
+
+<div class="divider" id="features"><span>Features</span></div>
+
+<!-- ================= 01 dashboard ================= -->
+<section class="feature">
+  <p class="eyebrow">01 / Dashboard</p>
+  <h2>The morning check, <span class="dim">in one glance.</span></h2>
+  <p class="body">Online and offline counts, registered accounts out of active ones, and every problem sorted by severity. Each phone is drawn with one LED per SIP account. Green is registered, red is not, grey is switched off, and blue blinks while a line is in a call.</p>
+  <div class="shot"><img src="img/phones.webp" loading="lazy" width="1440" height="880" alt="Phone list with search, firmware status, account state and bulk actions on selected phones"></div>
+  <ul class="points">
+    <li><b>Search that combines.</b> <code>hq unregistered</code> finds phones at the HQ site with an account down. Press <code>/</code> to jump there.</li>
+    <li><b>Bulk actions.</b> Tick phones to read, reboot, apply a template, update, disable or delete them together.</li>
+    <li><b>Find them.</b> Scan a network, paste a list with <code>name, address</code> pairs, or add ranges like <code>10.0.5.20-60</code>.</li>
+  </ul>
+</section>
+
+<!-- ================= 02 checks ================= -->
+<section class="feature">
+  <p class="eyebrow">02 / Problem checks</p>
+  <h2>It notices what you'd <span class="dim">only find</span> one phone at a time.</h2>
+  <p class="body">Every phone is re-read on a schedule and checked against the same rules. The problems land on the dashboard, sorted by how much they matter.</p>
+  <div class="checks">
+    <div class="check"><b class="tag crit">Reachability</b><p>Phone offline, web login refused, a read that didn't finish.</p></div>
+    <div class="check"><b class="tag crit">Accounts</b><p>An account that can't register, an active account with no SIP server, a phone with no account at all, the same extension on two phones.</p></div>
+    <div class="check"><b class="tag crit">Security</b><p>The factory admin password still accepted, web access over plain HTTP, Telnet or SSH open.</p></div>
+    <div class="check"><b class="tag warn">Settings</b><p>No NTP server, no syslog server, DHCP option 66 free to point the phone somewhere else.</p></div>
+    <div class="check"><b class="tag info">Firmware</b><p>A newer image for the phone's family waiting in your library.</p></div>
+    <div class="check"><b class="tag info">Freshness</b><p>A phone that hasn't been read in hours, so you know when the data is old.</p></div>
+  </div>
+</section>
+
+<!-- ================= 03 phone ================= -->
+<section class="feature">
+  <p class="eyebrow">03 / Phone detail</p>
+  <h2>Everything a phone knows, <span class="dim">without the web page.</span></h2>
+  <p class="body">Model and every firmware component, MAC, uptime, network and time settings, a management access checklist, each SIP account with its registration state, and the live state of every line key. The Settings tab shows the phone's values with their names next to the P-values. A console reads and writes any value and dials a number.</p>
+  <div class="shot"><img src="img/phone-overview.webp" loading="lazy" width="1440" height="880" alt="Phone page with problems, system facts, accounts, firmware, management access and line state"></div>
+  <div class="trio">
+    <figure><img src="img/phone-accounts.webp" loading="lazy" width="1440" height="880" alt="Accounts tab"><figcaption>Accounts</figcaption></figure>
+    <figure><img src="img/phone-settings.webp" loading="lazy" width="1440" height="880" alt="Settings tab with values grouped by topic"><figcaption>Settings</figcaption></figure>
+    <figure><img src="img/phone-console.webp" loading="lazy" width="1440" height="880" alt="Console tab"><figcaption>Console</figcaption></figure>
+  </div>
+</section>
+
+<!-- ================= 04 templates ================= -->
+<section class="feature">
+  <p class="eyebrow">04 / Templates</p>
+  <h2>Write it once. <span class="dim">Review it per phone.</span> Apply.</h2>
+  <p class="body">A template is a list of <code>P-value = value</code> lines, picked by name or typed by number. Apply it to any number of phones: each one is read first and you see exactly which values would change where, and only then are they written. Tick a box to reboot the phones afterwards.</p>
+  <div class="duo">
+    <figure><img src="img/template-editor.webp" loading="lazy" width="1440" height="880" alt="Template editor with a setting picker"><figcaption>Edit</figcaption></figure>
+    <figure><img src="img/apply-template.webp" loading="lazy" width="1440" height="880" alt="Apply dialog with a phone picker and review step"><figcaption>Apply</figcaption></figure>
+  </div>
+  <ul class="points">
+    <li><b>Provisioning files.</b> The same template exports as <code>cfg&lt;mac&gt;.xml</code>, one per phone, for a provisioning server of your own.</li>
+    <li><b>From a golden phone.</b> Save any phone's current settings as a template and make it the standard.</li>
+  </ul>
+</section>
+
+<!-- ================= 05 extensions ================= -->
+<section class="feature">
+  <p class="eyebrow">05 / Extensions</p>
+  <h2>Which desk <span class="dim">is</span> 214?</h2>
+  <p class="body">Every SIP account across every phone in one table: extension, display name, state, phone, server. Search it, and spot an extension that's registered from two desks before the PBX starts bouncing them.</p>
+  <div class="shot"><img src="img/extensions.webp" loading="lazy" width="1440" height="880" alt="Extensions table across all phones"></div>
+</section>
+
+<!-- ================= 06 firmware ================= -->
+<section class="feature">
+  <p class="eyebrow">06 / Firmware</p>
+  <h2>Firmware updates <span class="dim">that watch the phone come back.</span></h2>
+  <p class="body">Keep images in a library, see which phones have something newer, tick them and update. Each phone is pointed at the image, rebooted, and watched while it downloads and installs; then PhoneDesk checks the running version and puts the phone's previous upgrade settings back. One phone at a time, so a bad image can't take the office down.</p>
+  <div class="shot"><img src="img/firmware.webp" loading="lazy" width="1440" height="880" alt="Firmware page with available updates, running jobs and the image library"></div>
+  <ul class="points">
+    <li><b>Paste a Grandstream link.</b> A <code>Release_….zip</code> or a bare <code>…fw.bin</code> goes straight into the library.</li>
+    <li><b>Matched by family.</b> A GRP2613 gets <code>grp2610fw.bin</code>, a GXP2170 gets <code>gxp2130fw.bin</code>. Nothing is ever downgraded.</li>
+    <li><b>Your choice of source.</b> Serve from this computer, point phones at Grandstream's server, or at one of your own.</li>
+  </ul>
+</section>
+
+<!-- ================= 07 history ================= -->
+<section class="feature">
+  <p class="eyebrow">07 / Settings history</p>
+  <h2>What changed on that phone? <span class="dim">Compare it.</span></h2>
+  <p class="body">A copy of each phone's settings is saved every time they change. Pick any two and see them side by side, or write an older copy back to the phone.</p>
+  <div class="shot"><img src="img/config-compare.webp" loading="lazy" width="1440" height="880" alt="Two saved settings copies compared side by side"></div>
+</section>
+
+<!-- ================= 08 data ================= -->
+<section class="feature">
+  <p class="eyebrow">08 / Your data</p>
+  <h2>On your computer. <span class="dim">Nowhere else.</span></h2>
+  <p class="body">No account, no cloud, nothing installed on the phones. Everything lives in one folder you choose, and moving to another computer is one passphrase-protected file.</p>
+  <div class="facts">
+    <div><b>AES-GCM</b><span>Phone passwords encrypted at rest</span></div>
+    <div><b>Argon2id</b><span>Passphrase for export files</span></div>
+    <div><b>Web API only</b><span>The same calls the phone's own pages make</span></div>
+    <div><b>Review first</b><span>Every write shows its changes before it's sent</span></div>
+  </div>
+</section>
+
+<!-- ================= phones ================= -->
+<div class="divider" id="phones"><span>Supported phones</span></div>
+<section class="feature">
+  <h2>GRP, GXP <span class="dim">and friends.</span></h2>
+  <p class="body">All a phone needs is its web interface switched on and the admin password. Registration state needs Action URI support turned on in the phone's web UI.</p>
+  <div class="families">
+    <div class="fam">
+      <div class="fam-head"><b>GRP26xx</b><span class="pill ok">Full</span></div>
+      <p>GRP2601, 2602, 2603, 2604, 2612, 2613, 2614, 2615, 2616, 2624, 2634, 2636, 2650, 2670</p>
+    </div>
+    <div class="fam">
+      <div class="fam-head"><b>GXP21xx, GXP16xx, GXP17xx</b><span class="pill ok">Full</span></div>
+      <p>GXP2130, 2135, 2140, 2160, 2170, GXP1610 to 1630, GXP1760, 1780, 1782</p>
+    </div>
+    <div class="fam">
+      <div class="fam-head"><b>Others</b><span class="pill part">Partial</span></div>
+      <p>GXV33xx and GXV34xx video phones, WP8xx and DP7xx cordless, HT8xx adapters. Same web API; line status may be missing.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= download ================= -->
+<div class="divider" id="download"><span>Download</span></div>
+<section class="feature">
+  <h2>Pick <span class="dim">your</span> platform.</h2>
+  <p class="body">Free. Built from the source on GitHub by GitHub Actions on every release.</p>
+  <div class="platforms">
+    <div class="plat" data-plat="mac">
+      <div class="plat-head">
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2.1-.9-3.4-.9-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8 1.6 0 2 .8 3.4.8 1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.2.7-3 1.6-.6.7-1.2 1.9-1 3.1 1.1.1 2.3-.6 3-1.5z"/></svg>
+        <b>macOS</b>
+      </div>
+      <dl>
+        <dt>Chip</dt><dd>Apple Silicon and Intel</dd>
+        <dt>Version</dt><dd data-ver>Latest</dd>
+        <dt>File</dt><dd>.zip with PhoneDesk.app</dd>
+        <dt>Size</dt><dd data-size="mac">–</dd>
+        <dt>Build</dt><dd>Universal</dd>
+      </dl>
+      <a class="btn btn-light wide" data-dl="mac" href="https://github.com/jaba0x/PhoneDesk/releases/latest">Download for Mac</a>
+      <p class="note">Not notarized yet: right-click the app and choose Open the first time.</p>
+    </div>
+    <div class="plat" data-plat="win">
+      <div class="plat-head">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M0 3.4 9.8 2v9.5H0V3.4zm11-1.6L24 0v11.4H11V1.8zM0 12.6h9.8V22L0 20.6v-8zm11 0h13V24l-13-1.8v-9.6z"/></svg>
+        <b>Windows</b>
+      </div>
+      <dl>
+        <dt>Chip</dt><dd>x64</dd>
+        <dt>Version</dt><dd data-ver>Latest</dd>
+        <dt>File</dt><dd>.zip with PhoneDesk.exe</dd>
+        <dt>Size</dt><dd data-size="win">–</dd>
+        <dt>Needs</dt><dd>Windows 10 or 11</dd>
+      </dl>
+      <a class="btn btn-light wide" data-dl="win" href="https://github.com/jaba0x/PhoneDesk/releases/latest">Download for Windows</a>
+      <p class="note">SmartScreen may warn about an unknown publisher: More info, then Run anyway.</p>
+    </div>
+    <div class="plat">
+      <div class="plat-head">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/></svg>
+        <b>From source</b>
+      </div>
+      <dl>
+        <dt>Language</dt><dd>Go 1.23+</dd>
+        <dt>UI</dt><dd>Wails v2, plain HTML/JS</dd>
+        <dt>Code</dt><dd>github.com/jaba0x/PhoneDesk</dd>
+        <dt>Tests</dt><dd><code>go test ./internal/...</code></dd>
+        <dt>Needs</dt><dd>Xcode CLT on a Mac</dd>
+      </dl>
+      <a class="btn btn-line wide" href="docs/development/">Build it yourself</a>
+      <p class="note">A phone that's misread makes a good test case: its Raw output has everything.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= faq ================= -->
+<div class="divider" id="faq"><span>FAQ</span></div>
+<section class="feature faq">
+  <h2>Frequently asked <span class="dim">questions</span></h2>
+  <details>
+    <summary>Does it change anything on my phones?</summary>
+    <p>Reading is read-only. Settings change only when you apply a template or write values from the console, and both show you the exact changes per phone first. A firmware update sets the phone's upgrade server for the duration and puts the previous setting back afterwards.</p>
+  </details>
+  <details>
+    <summary>Do I need a provisioning server or GDMS?</summary>
+    <p>No. PhoneDesk logs in to each phone's web interface, the same way you would in a browser. If you do run a provisioning server, templates export as <code>cfg&lt;mac&gt;.xml</code> files for it.</p>
+  </details>
+  <details>
+    <summary>Why do my accounts show as "unknown"?</summary>
+    <p>Registration state comes from the phone's line status, which the phone only shares when Action URI support is turned on in its web UI. Switch it on and read the phone again. Everything else works without it.</p>
+  </details>
+  <details>
+    <summary>Where are my passwords stored?</summary>
+    <p>In the data folder on your computer, encrypted with AES-GCM using a key only your user account can read. Nothing is sent anywhere else.</p>
+  </details>
+  <details>
+    <summary>Will firmware updates work over a VPN or zero trust access?</summary>
+    <p>Grandstream phones download firmware themselves. By default they download from your computer, which has to be reachable from the phone. If it isn't, point updates at Grandstream's public server or at a server of your own, in Settings.</p>
+  </details>
+  <details>
+    <summary>How many phones can it handle?</summary>
+    <p>It's built for a few dozen to a few hundred. Reachability is checked every 30 seconds and each phone is re-read every 15 minutes, four at a time; all of that is adjustable.</p>
+  </details>
+  <details>
+    <summary>It misreads my phone. What now?</summary>
+    <p>Open the phone, copy what the Raw output tab shows and post it in <a href="https://github.com/jaba0x/PhoneDesk/discussions">GitHub Discussions</a> or as an issue, with the model and firmware version. That's exactly what's needed to fix it.</p>
+  </details>
+  <details>
+    <summary>Is this a Grandstream product?</summary>
+    <p>No. PhoneDesk is an independent project, free to use, with its source on GitHub. Grandstream, GRP, GXP and GXV are trademarks of Grandstream Networks, Inc.</p>
+  </details>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="foot-in">
+    <div class="foot-brand">
+      <a class="brand" href="#top"><img src="img/logo.svg" alt="" width="28" height="28"><span>PhoneDesk</span></a>
+      <p>Built by Jaba Macharashvili.</p>
+      <a class="clihero" href="https://clihero.com"><img src="img/clihero-white.png" alt="clihero.com" width="120" height="36"></a>
+    </div>
+    <div class="foot-cols">
+      <div>
+        <b>Product</b>
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/jaba0x/PhoneDesk/releases">Releases</a>
+        <a href="docs/changelog/">Changelog</a>
+        <a href="https://jaba0x.github.io/SwitchDesk/">SwitchDesk, for Aruba switches</a>
+      </div>
+      <div>
+        <b>Help</b>
+        <a href="docs/">Documentation</a>
+        <a href="docs/troubleshooting/">Troubleshooting</a>
+        <a href="https://github.com/jaba0x/PhoneDesk/discussions">Discussions</a>
+        <a href="https://github.com/jaba0x/PhoneDesk/issues">Report a bug</a>
+      </div>
+      <div>
+        <b>Jaba</b>
+        <a href="https://clihero.com">clihero.com</a>
+        <a href="https://github.com/jaba0x">GitHub</a>
+        <a href="https://x.com/jaba0x">X</a>
+        <a href="https://www.linkedin.com/in/jaba0x">LinkedIn</a>
+      </div>
+    </div>
+  </div>
+  <p class="legal">PhoneDesk is not affiliated with or endorsed by Grandstream Networks. Grandstream, GRP, GXP and GXV are trademarks of Grandstream Networks, Inc.</p>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>

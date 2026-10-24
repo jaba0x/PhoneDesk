@@ -1,0 +1,84 @@
+name: build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.2.0 (leave empty to only build)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin/universal
+          - os: windows-latest
+            platform: windows/amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.2
+      - name: Test
+        run: |
+          go mod tidy
+          go test ./internal/...
+      - name: Work out version
+        id: ver
+        shell: bash
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then v="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then v="${{ inputs.version }}"
+          else v="0.0.0-dev"; fi
+          echo "version=${v#v}" >> "$GITHUB_OUTPUT"
+      - name: Build
+        shell: bash
+        run: wails build -clean -platform ${{ matrix.platform }} -ldflags "-X main.Version=${{ steps.ver.outputs.version }}"
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --deep --sign - build/bin/PhoneDesk.app
+          cd build/bin && ditto -c -k --keepParent PhoneDesk.app "PhoneDesk-${{ steps.ver.outputs.version }}-macos-universal.zip"
+      - name: Package Windows exe
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cd build/bin && 7z a "PhoneDesk-${{ steps.ver.outputs.version }}-windows-x64.zip" PhoneDesk.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoneDesk-${{ runner.os }}
+          path: build/bin/*.zip
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag' || inputs.version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then tag="$GITHUB_REF_NAME"; else v="${{ inputs.version }}"; tag="v${v#v}"; fi
+          cat > notes.md <<'EOF'
+          ## Downloads
+
+          **macOS** (Apple Silicon and Intel): `PhoneDesk-*-macos-universal.zip`. Unzip and drag PhoneDesk to Applications. The app isn't notarized by Apple, so the first time right-click it and choose **Open**, or run `xattr -dr com.apple.quarantine /Applications/PhoneDesk.app`.
+
+          **Windows 10/11** (64-bit): `PhoneDesk-*-windows-x64.zip`. Unzip and run `PhoneDesk.exe`. SmartScreen may warn about an unknown publisher; choose **More info → Run anyway**.
+
+          Data from an earlier version is picked up automatically.
+          EOF
+          gh release create "$tag" dist/*.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PhoneDesk ${tag#v}" --notes-file notes.md
