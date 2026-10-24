@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.7
+
+- New icon: the same desk phone, now white on the dark tile and a little smaller, so it reads next to SwitchDesk's in the Dock instead of turning to grey mud at 64 pixels. App icon, favicon, banner, social preview and the screenshots are all redone.
+
 ## 0.1.6
 
 - An update no longer fails when the phone doesn't answer the reboot request. GXP16xx 1.0.2.x reboots the moment it reads the request, before replying, so the job now waits to see whether the phone goes down and only gives up (with the Action URI hint) if it's still up after 90 seconds.
