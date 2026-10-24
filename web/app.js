@@ -8,48 +8,61 @@
   addEventListener("scroll", onScroll, { passive: true });
   onScroll();
 
-  // ---------- port LED field behind the hero ----------
+  // ---------- line-key field behind the hero ----------
+  // Columns of line keys, like BLF sidecars next to a desk phone: each key
+  // has an LED and a label. Green is registered, red isn't, grey is a key
+  // with nothing on it, and blue blinks while a line is in a call.
   const cv = document.querySelector(".ports");
   if (cv) {
     const ctx = cv.getContext("2d");
-    let cells = [], w = 0, h = 0, dpr = 1;
-    const COLORS = { off: [42, 49, 61], up: [76, 195, 138], warn: [232, 176, 74] };
+    let keys = [], w = 0, h = 0, dpr = 1;
+    const LED = { off: [42, 49, 61], up: [76, 195, 138], down: [240, 97, 109], call: [110, 168, 254] };
+    const KW = 74, KH = 16, GX = 22, GY = 8, ROWS = 6, MODGAP = 18;
     const layout = () => {
       dpr = Math.min(devicePixelRatio || 1, 2);
       w = cv.clientWidth; h = cv.clientHeight;
       cv.width = w * dpr; cv.height = h * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const pw = 14, ph = 10, gx = 7, gy = 9, block = 6; // ports come in groups of 6, like a faceplate
-      cells = [];
-      for (let y = 18, row = 0; y < h; y += ph + gy, row++) {
-        let x = 10 - ((row % 2) * 11);
-        for (let col = 0; x < w; col++) {
-          if (col && col % block === 0) x += 16;
+      keys = [];
+      for (let x = 14, col = 0; x < w; x += KW + GX, col++) {
+        // every other column starts half a key lower, so the grid doesn't read as a table
+        for (let y = 16 + (col % 2) * 12, row = 0; y < h; y += KH + GY, row++) {
+          if (row && row % ROWS === 0) y += MODGAP;
           const r = Math.random();
-          const state = r < 0.22 ? "up" : r < 0.23 ? "warn" : "off";
-          cells.push({ x, y, state, phase: Math.random() * Math.PI * 2, speed: 0.6 + Math.random() * 1.6 });
-          x += pw + gx;
+          const state = r < 0.3 ? "up" : r < 0.33 ? "down" : "off";
+          keys.push({ x, y, state, label: 20 + Math.random() * 26, phase: Math.random() * Math.PI * 2, speed: 0.5 + Math.random() * 1.4, until: 0 });
         }
       }
-      cells.pw = pw; cells.ph = ph;
     };
+    const rr = (x, y, bw, bh, r) => { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, bw, bh, r) : ctx.rect(x, y, bw, bh); ctx.fill(); };
     const draw = (t) => {
       ctx.clearRect(0, 0, w, h);
-      for (const c of cells) {
-        const [r, g, b] = COLORS[c.state];
-        let a = c.state === "off" ? 0.32 : 0.18 + 0.42 * (0.5 + 0.5 * Math.sin(c.phase + t * 0.001 * c.speed));
-        if (c.state === "warn") a = 0.25 + 0.55 * (0.5 + 0.5 * Math.sin(c.phase + t * 0.004));
+      for (const k of keys) {
+        // key cap and label
+        ctx.fillStyle = "rgba(42,49,61,.34)";
+        rr(k.x, k.y, KW, KH, 4);
+        ctx.fillStyle = k.state === "off" ? "rgba(123,132,148,.14)" : "rgba(123,132,148,.3)";
+        rr(k.x + 20, k.y + 6.5, k.label, 3, 1.5);
+        // LED
+        const [r, g, b] = LED[k.state];
+        let a = 0.5;
+        if (k.state === "up") a = 0.3 + 0.5 * (0.5 + 0.5 * Math.sin(k.phase + t * 0.001 * k.speed));
+        if (k.state === "down") a = 0.55 + 0.35 * (0.5 + 0.5 * Math.sin(k.phase + t * 0.0025));
+        if (k.state === "call") a = 0.3 + 0.7 * (Math.sin(t * 0.006) > 0 ? 1 : 0.2);
         ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
-        ctx.beginPath();
-        ctx.roundRect ? ctx.roundRect(c.x, c.y, cells.pw, cells.ph, 2) : ctx.rect(c.x, c.y, cells.pw, cells.ph);
-        ctx.fill();
+        rr(k.x + 6, k.y + 4, 8, 8, 2);
       }
     };
-    // now and then a key lights up or goes dark, like a bank of line keys
-    const flip = () => {
-      for (let i = 0; i < 3; i++) {
-        const c = cells[(Math.random() * cells.length) | 0];
-        if (c && c.state !== "warn") c.state = c.state === "up" ? "off" : "up";
+    // phones register and drop, calls start and end
+    const flip = (t) => {
+      for (const k of keys) if (k.state === "call" && t > k.until) k.state = "up";
+      for (let i = 0; i < 2; i++) {
+        const k = keys[(Math.random() * keys.length) | 0];
+        if (!k || k.state === "call") continue;
+        const r = Math.random();
+        if (k.state === "up" && r < 0.12) { k.state = "call"; k.until = t + 4000 + Math.random() * 6000; }
+        else if (k.state === "down" && r < 0.5) k.state = "up";
+        else if (k.state !== "down") k.state = k.state === "up" ? "off" : "up";
       }
     };
     layout();
@@ -61,7 +74,7 @@
       let lastFlip = 0;
       const loop = (t) => {
         if (visible) {
-          if (t - lastFlip > 900) { flip(); lastFlip = t; }
+          if (t - lastFlip > 1100) { flip(t); lastFlip = t; }
           draw(t);
         }
         requestAnimationFrame(loop);
